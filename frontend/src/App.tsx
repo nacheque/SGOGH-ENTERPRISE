@@ -1,19 +1,20 @@
 import { useState, useEffect } from 'react';
-import { HardHat, Users, Building2, Activity } from 'lucide-react';
+import { HardHat, Users, Building2, Activity, Landmark } from 'lucide-react';
 import { ObrasView } from './views/ObrasView';
 import { PersonasView } from './views/PersonasView';
 import { InmueblesView } from './views/InmueblesView';
+import { FinanzasView } from './views/FinanzasView';
 import { Toast } from './components/common/Toast';
 import api from './api/axios';
 
 // Definición de las pestañas principales del Dashboard
-type Tab = 'obras' | 'personas' | 'inmuebles';
+type Tab = 'finanzas' | 'obras' | 'personas' | 'inmuebles';
 
 export default function App() {
   // -------------------------------------------------------------
   // ESTADOS GLOBALES DE NAVEGACIÓN Y SISTEMA
   // -------------------------------------------------------------
-  const [activeTab, setActiveTab] = useState<Tab>('obras');
+  const [activeTab, setActiveTab] = useState<Tab>('finanzas');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
 
@@ -51,6 +52,18 @@ export default function App() {
           </div>
 
           {/* Menú de Navegación por Módulos */}
+          
+          <button
+              onClick={() => setActiveTab('finanzas')}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${
+                activeTab === 'finanzas'
+                  ? 'bg-brand-600 text-white shadow-md'
+                  : 'hover:bg-cecsa-hover text-slate-400'
+              }`}
+            >
+              <Landmark className="w-4 h-4" /> SG Adm. y Finanzas
+            </button>
+          
           <nav className="space-y-1">
             <button
               onClick={() => setActiveTab('obras')}
@@ -116,6 +129,7 @@ export default function App() {
         {/* Header Superior */}
         <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shadow-sm">
           <h2 className="text-base font-bold text-slate-800">
+            {activeTab === 'finanzas' && 'Módulo 7 • SG Administración y Finanzas'}
             {activeTab === 'obras' && 'Módulo 1 • Gestión de Obras de Infraestructura'}
             {activeTab === 'personas' && 'Módulo 2 • Padrón General de Personas y Titulares'}
             {activeTab === 'inmuebles' && 'Módulo 3 • Catastro, Lotes y Vinculaciones'}
@@ -125,6 +139,7 @@ export default function App() {
 
         {/* Contenedor dinámico según pestaña activa */}
         <div className="p-8 flex-1 overflow-y-auto">
+          {activeTab === 'finanzas' && <FinanzasView showToast={showToast} />}
           {activeTab === 'obras' && <ObrasView showToast={showToast} />}
           {activeTab === 'personas' && <PersonasView showToast={showToast} />}
           {activeTab === 'inmuebles' && <InmueblesView showToast={showToast} />}

@@ -1,32 +1,65 @@
 import { Request, Response, NextFunction } from 'express';
 import { InmueblesRepository } from '../repositories/inmuebles.repository';
 
-const repo = new InmueblesRepository();
+const inmueblesRepo = new InmueblesRepository();
 
-// GET /api/v1/inmuebles
 export const getInmuebles = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const inmuebles = await repo.findAll();
-    res.status(200).json({ status: 'success', data: inmuebles });
+    const inmuebles = await inmueblesRepo.getAll();
+    res.status(200).json({
+      status: 'success',
+      data: inmuebles,
+    });
   } catch (error) {
     next(error);
   }
 };
 
-// POST /api/v1/inmuebles
 export const createInmueble = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { id_obra, metros_frente } = req.body;
+    const {
+      clave_cliente,
+      id_obra,
+      id_frentista,
+      id_titular,
+      calle,
+      numero,
+      manzana,
+      lote_catast_muni,
+      lote_catast_provincia,
+      metros_frente,
+      conexion_gabinete,
+      gabinete_colocado,
+      observacion,
+    } = req.body;
 
-    if (!id_obra || metros_frente === undefined) {
+    if (!clave_cliente || !id_obra || !calle || metros_frente === undefined) {
       return res.status(400).json({
         status: 'error',
-        message: 'Los campos "id_obra" y "metros_frente" son obligatorios.',
+        message: 'Faltan campos obligatorios: clave_cliente, id_obra, calle y metros_frente son requeridos.',
       });
     }
 
-    const nuevoInmueble = await repo.create(req.body);
-    res.status(201).json({ status: 'success', data: nuevoInmueble });
+    const nuevoInmueble = await inmueblesRepo.create({
+      clave_cliente,
+      id_obra: Number(id_obra),
+      id_frentista: id_frentista ? Number(id_frentista) : null,
+      id_titular: id_titular ? Number(id_titular) : null,
+      calle,
+      numero,
+      manzana,
+      lote_catast_muni,
+      lote_catast_provincia,
+      metros_frente: Number(metros_frente),
+      conexion_gabinete: Boolean(conexion_gabinete),
+      gabinete_colocado: Boolean(gabinete_colocado),
+      observacion,
+    });
+
+    res.status(201).json({
+      status: 'success',
+      data: nuevoInmueble,
+    });
   } catch (error) {
     next(error);
   }

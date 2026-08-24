@@ -1,5 +1,14 @@
 // ==========================================
-// 1. MÓDULO DE OBRAS
+// SISTEMA & HEALTH CHECK
+// ==========================================
+export interface HealthResponse {
+  status: string;
+  message: string;
+  serverTime: string;
+}
+
+// ==========================================
+// MÓDULO DE OBRAS
 // ==========================================
 export type EstadoObra = 'PLANIFICADA' | 'EN_PROGRESO' | 'FINALIZADA' | 'PAUSADA';
 
@@ -24,7 +33,7 @@ export interface CreateObraDTO {
 }
 
 // ==========================================
-// 2. MÓDULO DE PERSONAS (Titulares / Frentistas)
+// MÓDULO DE PERSONAS (Titulares / Frentistas)
 // ==========================================
 export interface Persona {
   id_persona: number;
@@ -47,7 +56,7 @@ export interface CreatePersonaDTO {
 }
 
 // ==========================================
-// 3. MÓDULO DE INMUEBLES (Catastro y Lotes)
+// MÓDULO DE INMUEBLES (Catastro y Lotes)
 // ==========================================
 export interface Inmueble {
   id_inmueble: number;
@@ -55,14 +64,16 @@ export interface Inmueble {
   id_obra: number;
   id_titular?: number | null;
   id_frentista?: number | null;
+  manzana?: string | null;
+  lote_catast_muni?: string | null;
+  lote_catast_provincia?: string | null;
   calle: string;
-  numero?: string;
-  manzana?: string;
-  lote?: string;
+  numero?: string | null;
   metros_frente: number;
   conexion_gabinete: boolean;
   gabinete_colocado: boolean;
-  // Propiedades enriquecidas que retorna el Backend mediante JOINs
+  observacion?: string | null;
+  // Propiedades enriquecidas que retorna el backend con JOINs
   nombre_obra?: string;
   titular_nombre?: string;
   frentista_nombre?: string;
@@ -74,20 +85,46 @@ export interface CreateInmuebleDTO {
   id_obra: number;
   id_titular?: number | null;
   id_frentista?: number | null;
+  manzana?: string;
+  lote_catast_muni?: string;
+  lote_catast_provincia?: string;
   calle: string;
   numero?: string;
-  manzana?: string;
-  lote?: string;
   metros_frente: number;
-  conexion_gabinete?: boolean;
-  gabinete_colocado?: boolean;
+  conexion_gabinete: boolean;
+  gabinete_colocado: boolean;
+  observacion?: string;
 }
 
+
 // ==========================================
-// 4. SISTEMA & HEALTH CHECK
+// ENTIDAD DE CUENTA CORRIENTE (ficha individual por inmueble)
 // ==========================================
-export interface HealthResponse {
-  status: string;
-  message: string;
-  serverTime: string;
+export interface CuentaCorrienteRow {
+  id_inmueble: number;
+  clave: string;
+  frentista_nombre: string | null;
+  titular_nombre: string | null;
+  metros_frente: number;
+  calle: string;
+  numero: string | null;
+  mza: string | null;
+  lote_catast_muni: string | null;
+  lote_catast_provincia: string | null;
+  observacion: string | null;
+  conexion_gabinete: boolean;
+  gabinete_colocado: boolean;
+  dni: string | null;
+  cuil: string | null;
+  telefono: string | null;
+  email: string | null;
+  precio_x_metro: number;
+  costo_obra: number;
+  serv_dom: number;
+  costo_total: number;
+  plan_pagos: number;
+  cuota_base: number;
+  estado: string;
+  cuota_vigente_actual: number;
 }
+
