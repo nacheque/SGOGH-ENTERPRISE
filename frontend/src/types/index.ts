@@ -69,31 +69,35 @@ export interface Inmueble {
   lote_catast_provincia?: string | null;
   calle: string;
   numero?: string | null;
-  metros_frente: number;
+  metros_frente: number | string;
   conexion_gabinete: boolean;
   gabinete_colocado: boolean;
   observacion?: string | null;
-  // Propiedades enriquecidas que retorna el backend con JOINs
+
+  // Propiedades enriquecidas que retorna el Backend (JOINs)
   nombre_obra?: string;
-  titular_nombre?: string;
-  frentista_nombre?: string;
-  created_at?: string;
+  precio_x_metro?: number | string;
+  costo_gabinete?: number | string;
+  titular_nombre?: string | null;
+  titular_dni?: string | null;
+  frentista_nombre?: string | null;
+  frentista_dni?: string | null;
 }
 
 export interface CreateInmuebleDTO {
   clave_cliente: string;
   id_obra: number;
-  id_titular?: number | null;
   id_frentista?: number | null;
-  manzana?: string;
-  lote_catast_muni?: string;
-  lote_catast_provincia?: string;
+  id_titular?: number | null;
   calle: string;
-  numero?: string;
-  metros_frente: number;
+  numero?: string | null;
+  manzana?: string | null;
+  lote_catast_muni?: string | null;
+  lote_catast_provincia?: string | null;
+  metros_frente: number | string;
   conexion_gabinete: boolean;
-  gabinete_colocado: boolean;
-  observacion?: string;
+  gabinete_colocado?: boolean;
+  observacion?: string | null;
 }
 
 
