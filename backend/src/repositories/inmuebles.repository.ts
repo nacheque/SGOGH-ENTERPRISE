@@ -1,5 +1,5 @@
 import { pool } from '../config/database';
-import {CreateInmuebleDTO, InmuebleResponseDTO} from '../types/inmueble.repository';
+import {CreateInmuebleDTO, InmuebleResponseDTO} from '../types/inmueble.types';
 
 export class InmueblesRepository {
   // Consultar inmuebles uniendo los datos de obra, titular y frentista
