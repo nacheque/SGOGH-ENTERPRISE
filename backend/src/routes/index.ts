@@ -4,6 +4,7 @@ import { getObras, createObra } from '../controllers/obras.controller';
 import { getPersonas, createPersona } from '../controllers/personas.controller';
 import { getInmuebles, createInmueble } from '../controllers/inmuebles.controller';
 import indicesRoutes from './indices.routes';
+import contratosRoutes from './contratos.routes';
 
 const router = Router();
 
@@ -24,5 +25,8 @@ router.post('/inmuebles', createInmueble);
 
 // Indices de Actualizacion de Cuotas
 router.use('/indices', indicesRoutes)
+
+// Contratos de obras
+router.use('/contratos', contratosRoutes)
 
 export default router;
