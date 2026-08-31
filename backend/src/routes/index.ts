@@ -5,6 +5,8 @@ import { getPersonas, createPersona } from '../controllers/personas.controller';
 import { getInmuebles, createInmueble } from '../controllers/inmuebles.controller';
 import indicesRoutes from './indices.routes';
 import contratosRoutes from './contratos.routes';
+import pagosRoutes from './pagos.routes';
+import cuotasRoutes from './cuotas.routes';
 
 const router = Router();
 
@@ -28,5 +30,9 @@ router.use('/indices', indicesRoutes)
 
 // Contratos de obras
 router.use('/contratos', contratosRoutes)
+
+// Pagos y Cuotas
+router.use('/pagos', pagosRoutes);
+router.use('/cuotas', cuotasRoutes);
 
 export default router;
