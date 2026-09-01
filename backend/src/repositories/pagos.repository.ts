@@ -46,14 +46,17 @@ export class PagosRepository {
         data.comprobante ?? null,
       ]);
 
-      // 3. Actualizar estado de cuota
+      // 3. Actualizar estado y sincronizar monto_actualizado con el valor liquidado
       const updateCuotaQuery = `
         UPDATE cuotas 
-        SET estado = 'PAGADA' 
+        SET 
+          estado = 'PAGADA',
+          monto_actualizado = $2
         WHERE id_cuota = $1;
       `;
-      await client.query(updateCuotaQuery, [data.id_cuota]);
-
+      
+      await client.query(updateCuotaQuery, [data.id_cuota, data.monto]);
+      
       await client.query('COMMIT');
 
       return pagoRes.rows[0];

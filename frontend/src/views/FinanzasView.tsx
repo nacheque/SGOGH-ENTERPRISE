@@ -5,6 +5,7 @@ import { getInmuebles } from '../api/inmuebles.api';
 import { ResumenObraHeader } from '../components/finanzas/ResumenObraHeader';
 import { CuentaCorrienteTable } from '../components/finanzas/CuentaCorrienteTable';
 import { LayoutDashboard, ReceiptText } from 'lucide-react';
+import { PlanCuotasModal } from '../components/finanzas/PlanCuotasModal';
 
 interface Props {
   showToast: (msg: string, type: 'success' | 'error') => void;
@@ -18,6 +19,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
   const [selectedObraId, setSelectedObraId] = useState<number | null>(null);
   const [inmuebles, setInmuebles] = useState<Inmueble[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [selectedCuentaModal, setSelectedCuentaModal] = useState<CuentaCorrienteRow | null>(null);
 
   // Cargar datos base del sistema
   useEffect(() => {
@@ -45,9 +47,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
     fetchData();
   }, []);
 
-  // Filtrar y calcular la cuenta corriente en base a los inmuebles y obra seleccionada
-  const selectedObra = obras.find((o) => o.id_obra === selectedObraId);
-  
+  // Filtrar y calcular la cuenta corriente en base a los inmuebles y obra seleccionada  
   const cuentaCorrienteData: CuentaCorrienteRow[] = inmuebles
     .filter((inm) => selectedObraId === null || inm.id_obra === selectedObraId)
     .map((inm) => {
@@ -143,6 +143,13 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
           <CuentaCorrienteTable
             data={cuentaCorrienteData}
             loading={loading}
+            onSelectCuenta={setSelectedCuentaModal}
+          />
+          <PlanCuotasModal
+            cuenta={selectedCuentaModal}
+            isOpen={Boolean(selectedCuentaModal)}
+            onClose={() => setSelectedCuentaModal(null)}
+            showToast={showToast}
           />
         </div>
       )}

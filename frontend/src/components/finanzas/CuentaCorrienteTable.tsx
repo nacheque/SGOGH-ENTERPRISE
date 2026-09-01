@@ -1,13 +1,14 @@
 import React from 'react';
 import type { CuentaCorrienteRow } from '../../types';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Receipt } from 'lucide-react';
 
 interface Props {
   data: CuentaCorrienteRow[];
   loading: boolean;
+  onSelectCuenta: (cuenta: CuentaCorrienteRow) => void;
 }
 
-export const CuentaCorrienteTable: React.FC<Props> = ({ data, loading }) => {
+export const CuentaCorrienteTable: React.FC<Props> = ({ data, loading, onSelectCuenta }) => {
   return (
     <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
       {loading ? (
@@ -24,6 +25,7 @@ export const CuentaCorrienteTable: React.FC<Props> = ({ data, loading }) => {
           <table className="w-full text-left text-xs text-slate-600 whitespace-nowrap min-w-[1100px]">
             <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
               <tr>
+                <th className="px-3 py-3 text-center">PLAN / CUOTAS</th>
                 <th className="px-3 py-3">CLAVE</th>
                 <th className="px-3 py-3">MZA</th>
                 <th className="px-3 py-3">FRENTISTA</th>
@@ -47,6 +49,16 @@ export const CuentaCorrienteTable: React.FC<Props> = ({ data, loading }) => {
             <tbody className="divide-y divide-slate-100 font-normal">
               {data.map((row) => (
                 <tr key={row.id_inmueble} className="hover:bg-slate-50/70 transition">
+
+                  <td className="px-3 py-2.5 text-center">
+                      <button
+                        onClick={() => onSelectCuenta(row)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-brand-50 hover:bg-brand-600 hover:text-white text-brand-700 rounded-md text-[11px] font-bold border border-brand-200 transition shadow-xs"
+                        title="Ver Plan de Cuotas">
+                        <Receipt className="w-3.5 h-3.5" /> Plan / Cuotas
+                      </button>
+                  </td>
+
                   <td className="px-3 py-2.5 font-mono font-semibold text-slate-900">{row.clave}</td>
                   <td className="px-3 py-2.5 font-mono text-slate-500">{row.mza || '-'}</td>
                   <td className="px-3 py-2.5 font-medium text-slate-800">
