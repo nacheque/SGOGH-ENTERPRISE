@@ -8,9 +8,9 @@ export class PagosRepository {
     try {
       await client.query('BEGIN');
 
-      // 1. Validar cuota existente
+      // 1. Validar y obtener datos completos de la cuota con bloqueo FOR UPDATE
       const cuotaQuery = `
-        SELECT id_cuota, estado 
+        SELECT id_cuota, id_contrato, concepto, periodo, estado 
         FROM cuotas 
         WHERE id_cuota = $1 
         FOR UPDATE;
@@ -21,11 +21,13 @@ export class PagosRepository {
         throw new Error(`No se encontró la cuota con ID ${data.id_cuota}.`);
       }
 
-      if (cuotaRes.rows[0].estado === 'PAGADA') {
+      const cuota = cuotaRes.rows[0];
+
+      if (cuota.estado === 'PAGADA') {
         throw new Error(`La cuota #${data.id_cuota} ya se encuentra registrada como PAGADA.`);
       }
 
-      // 2. Insertar pago con los nombres reales de la tabla
+      // 2. Insertar pago en la tabla pagos
       const fechaPagoFinal = data.fecha_pago || new Date().toISOString().split('T')[0];
       const insertPagoQuery = `
         INSERT INTO pagos (
@@ -46,7 +48,7 @@ export class PagosRepository {
         data.comprobante ?? null,
       ]);
 
-      // 3. Actualizar estado y sincronizar monto_actualizado con el valor liquidado
+      // 3. Actualizar estado y monto_actualizado de la cuota pagada
       const updateCuotaQuery = `
         UPDATE cuotas 
         SET 
@@ -54,9 +56,24 @@ export class PagosRepository {
           monto_actualizado = $2
         WHERE id_cuota = $1;
       `;
-      
       await client.query(updateCuotaQuery, [data.id_cuota, data.monto]);
-      
+
+      // 4. Propagar arrastre acumulativo: actualizar monto_actualizado a cuotas PENDIENTES futuras
+      const updateCuotasFuturasQuery = `
+        UPDATE cuotas 
+        SET monto_actualizado = $1 
+        WHERE id_contrato = $2 
+          AND concepto = $3 
+          AND periodo > $4 
+          AND estado = 'PENDIENTE';
+      `;
+      await client.query(updateCuotasFuturasQuery, [
+        data.monto,
+        cuota.id_contrato,
+        cuota.concepto,
+        cuota.periodo,
+      ]);
+
       await client.query('COMMIT');
 
       return pagoRes.rows[0];
