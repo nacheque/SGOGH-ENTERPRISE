@@ -34,7 +34,8 @@ export const createContrato = async (req: Request, res: Response, next: NextFunc
       (error.message.includes('Faltan') ||
         error.message.includes('No se encontró') ||
         error.message.includes('mayor a 0') ||
-        error.message.includes('anticipo'))
+        error.message.includes('anticipo') ||
+        error.message.includes('ya posee un contrato'))
     ) {
       return res.status(400).json({ status: 'error', message: error.message });
     }

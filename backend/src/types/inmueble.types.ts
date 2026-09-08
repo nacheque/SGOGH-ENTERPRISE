@@ -1,3 +1,7 @@
+// ==========================================
+// 1. Tipos Base / Inmuebles
+// ==========================================
+
 export interface CreateInmuebleDTO {
   clave_cliente: string;
   id_obra: number;
@@ -45,6 +49,10 @@ export interface InmuebleResponseDTO {
   cuota_base_obra?: number | string | null;
   monto_anticipo?: number | string | null;
 }
+
+// ==========================================
+// 2. Tipos para Alta Atómica Compuesta
+// ==========================================
 
 export interface PersonaInputDTO {
   nombre_completo: string;

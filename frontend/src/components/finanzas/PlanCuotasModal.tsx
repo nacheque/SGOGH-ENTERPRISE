@@ -1,17 +1,26 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { CuentaCorrienteRow, CuotaConPagoDTO } from '../../types';
-import { getCuotasByInmueble } from '../../api/cuotas.api';
-import { getIndiceByObraYPeriodo } from '../../api/indices.api';
+import api from '../../api/axios';
 import { CobrarCuotaModal } from './CobrarCuotaModal';
-import { X, CheckCircle2, Clock, AlertTriangle, CreditCard, Loader2, RefreshCw } from 'lucide-react';
-import { calcularCuotasEnCascada, type CuotaCalculadaRow } from '../../utils/calcularCuotasEnCascada';
-import { formatCurrencyAR, formatDateAR } from '../../utils/formatters';
+import {
+  X,
+  Receipt,
+  AlertCircle,
+  PlusCircle,
+  ArrowLeft,
+  Loader2,
+  CheckCircle2,
+  TrendingUp,
+  CreditCard,
+  Check,
+} from 'lucide-react';
 
 interface Props {
   cuenta: CuentaCorrienteRow | null;
   isOpen: boolean;
   onClose: () => void;
   showToast: (msg: string, type: 'success' | 'error') => void;
+  onPlanCreado?: () => void;
 }
 
 export const PlanCuotasModal: React.FC<Props> = ({
@@ -19,309 +28,554 @@ export const PlanCuotasModal: React.FC<Props> = ({
   isOpen,
   onClose,
   showToast,
+  onPlanCreado,
 }) => {
-  const [cuotas, setCuotas] = useState<CuotaConPagoDTO[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingIcc, setLoadingIcc] = useState<number | null>(null);
-  const [selectedCuotaCobro, setSelectedCuotaCobro] = useState<CuotaConPagoDTO | null>(null);
+  const [cuotas, setCuotas] = useState<any[]>([]);
+  const [loadingCuotas, setLoadingCuotas] = useState(false);
+  const [modoEmision, setModoEmision] = useState(false);
+  const [submittingPlan, setSubmittingPlan] = useState(false);
 
-  // Almacena los porcentajes manuales ingresados para cada cuota { [id_cuota]: number }
-  const [ajustesPorc, setAjustesPorc] = useState<Record<number, number>>({});
+  // Estado para la imputación de cobros
+  const [cuotaACobrar, setCuotaACobrar] = useState<CuotaConPagoDTO | null>(null);
 
-  const fetchCuotas = async () => {
-    if (!cuenta) return;
+  // Estados del Formulario de Parametrización (Emisión)
+  const [tipoIndexacion, setTipoIndexacion] = useState<'ICC' | 'FIJO'>('ICC');
+  const [anticipo, setAnticipo] = useState<number>(0);
+  const [planCuotasObra, setPlanCuotasObra] = useState<number>(12);
+  const [planCuotasGabinete, setPlanCuotasGabinete] = useState<number>(1);
+  const [fechaPrimerVencimiento, setFechaPrimerVencimiento] = useState<string>('');
+
+  // Inicializar fecha de vencimiento por defecto (día 10 del mes siguiente)
+  useEffect(() => {
+    const today = new Date();
+    const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 10);
+    const yyyy = nextMonth.getFullYear();
+    const mm = String(nextMonth.getMonth() + 1).padStart(2, '0');
+    const dd = String(nextMonth.getDate()).padStart(2, '0');
+    setFechaPrimerVencimiento(`${yyyy}-${mm}-${dd}`);
+  }, [isOpen]);
+
+  // Cargar cuotas procesando res.data.data
+  const fetchCuotas = async (idInmueble: number) => {
     try {
-      setLoading(true);
-      const data = await getCuotasByInmueble(cuenta.id_inmueble);
-      setCuotas(data);
-      setAjustesPorc({});
+      setLoadingCuotas(true);
+      const res = await api.get(`/cuotas/inmueble/${idInmueble}`);
+      const rawList = Array.isArray(res.data?.data)
+        ? res.data.data
+        : Array.isArray(res.data)
+        ? res.data
+        : [];
+
+      // Inicializar cada cuota asegurando coeficiente numérico
+      const formatted = rawList.map((c: any) => {
+        const base = Number(c.monto_base || 0);
+        const act = Number(c.monto_actualizado || c.monto_base || 0);
+        const coefCalculado =
+          Number(c.coeficiente_actualizacion || c.indice_aplicado) ||
+          (base > 0 ? Number((act / base).toFixed(4)) : 1.0);
+
+        return {
+          ...c,
+          coeficiente_actualizacion: coefCalculado,
+          monto_actualizado: act,
+        };
+      });
+
+      setCuotas(formatted);
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Error al cargar las cuotas', 'error');
+      setCuotas([]);
     } finally {
-      setLoading(false);
+      setLoadingCuotas(false);
     }
   };
 
   useEffect(() => {
     if (isOpen && cuenta) {
-      fetchCuotas();
+      setModoEmision(false);
+      setAnticipo(0);
+      setPlanCuotasObra(12);
+      setPlanCuotasGabinete(1);
+      fetchCuotas(cuenta.id_inmueble);
+    } else {
+      setCuotas([]);
     }
   }, [isOpen, cuenta]);
 
-  const handleAjusteChange = (idCuota: number, valorStr: string) => {
-    const val = parseFloat(valorStr) || 0;
-    setAjustesPorc((prev) => ({ ...prev, [idCuota]: val }));
+  if (!isOpen || !cuenta) return null;
+
+  // Valores numéricos seguros
+  const costoObra = Number(cuenta.costo_obra) || 0;
+  const servDom = cuenta.conexion_gabinete ? Number(cuenta.serv_dom) || 0 : 0;
+  const metrosFrenteNum = Number(cuenta.metros_frente) || 0;
+  const saldoFinanciarObra = Math.max(0, costoObra - (Number(anticipo) || 0));
+  const cuotaBaseObraSimulada = planCuotasObra > 0 ? saldoFinanciarObra / planCuotasObra : 0;
+  const cuotaBaseGabineteSimulada =
+    servDom > 0 && planCuotasGabinete > 0 ? servDom / planCuotasGabinete : 0;
+
+  // Manejador del cambio dinámico del índice en cuotas pendientes
+  const handleIndiceChange = (id_cuota: number, nuevoIndice: number) => {
+    setCuotas((prevCuotas) =>
+      prevCuotas.map((c) => {
+        if (c.id_cuota === id_cuota) {
+          const base = Number(c.monto_base || 0);
+          const actualizado = Number((base * nuevoIndice).toFixed(2));
+          return {
+            ...c,
+            coeficiente_actualizacion: nuevoIndice,
+            monto_actualizado: actualizado,
+          };
+        }
+        return c;
+      })
+    );
   };
 
-  const handleConsultarIcc = async (cuota: CuotaConPagoDTO) => {
-    if (!cuenta) return;
+  // Manejo del Envío a la API para emitir contrato nuevo
+  const handleEmitirPlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (anticipo >= costoObra && costoObra > 0) {
+      showToast('El anticipo no puede ser mayor o igual al costo total de la obra.', 'error');
+      return;
+    }
+
+    if (planCuotasObra <= 0) {
+      showToast('Debe seleccionar un plan de cuotas de obra válido.', 'error');
+      return;
+    }
+
+    if (!fechaPrimerVencimiento) {
+      showToast('La fecha del primer vencimiento es obligatoria.', 'error');
+      return;
+    }
+
     try {
-      setLoadingIcc(cuota.id_cuota);
-      const idObra = (cuenta as any).id_obra || 1;
-      const res = await getIndiceByObraYPeriodo(idObra, cuota.periodo);
+      setSubmittingPlan(true);
 
-      const coef = Number(res.coeficiente_incremento || 0);
-      const variacionPorc = coef > 1 ? (coef - 1) * 100 : coef;
+      await api.post('/contratos', {
+        id_inmueble: cuenta.id_inmueble,
+        plan_cuotas_obra: Number(planCuotasObra),
+        plan_cuotas_gabinete: cuenta.conexion_gabinete ? Number(planCuotasGabinete) : null,
+        tipo_indexacion: tipoIndexacion,
+        monto_anticipo: Number(anticipo) || 0,
+        fecha_primer_vencimiento: fechaPrimerVencimiento,
+      });
 
-      setAjustesPorc((prev) => ({
-        ...prev,
-        [cuota.id_cuota]: Number(variacionPorc.toFixed(2)),
-      }));
-
-      showToast(
-        `Índice ICC (${cuota.periodo}) aplicado: ${variacionPorc >= 0 ? '+' : ''}${variacionPorc.toFixed(2)}%`,
-        'success'
-      );
+      showToast('Plan de pagos emitido exitosamente', 'success');
+      setModoEmision(false);
+      await fetchCuotas(cuenta.id_inmueble);
+      onPlanCreado?.();
     } catch (err: any) {
-      showToast(
-        err.response?.data?.message || `No se encontró índice para el período ${cuota.periodo}`,
-        'error'
-      );
+      const errorMsg = err.response?.data?.message || 'Error al emitir el plan de pagos';
+      showToast(errorMsg, 'error');
     } finally {
-      setLoadingIcc(null);
+      setSubmittingPlan(false);
     }
   };
 
-  const cuotaBaseSemilla = useMemo(() => {
-    const cuotaObra = cuotas.find((c) => c.concepto === 'RED_OBRA');
-    if (cuotaObra) return Number(cuotaObra.monto_base || 0);
-    return Number(cuenta?.cuota_base || 0);
-  }, [cuotas, cuenta]);
-
-  // CÁLCULO EN CASCADA AGRUPADO POR CONCEPTO
-  const cuotasCalculadas = useMemo<CuotaCalculadaRow[]>(
-    () => calcularCuotasEnCascada(cuotas, ajustesPorc),
-    [cuotas, ajustesPorc]
-  );
-
-  if (!isOpen || !cuenta) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        
-        {/* Cabecera */}
-        <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-brand-50 text-brand-700 font-mono font-bold text-xs border border-brand-200">
-                {cuenta.clave}
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh]">
+          {/* Cabecera del Modal */}
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-brand-50 text-brand-600 rounded-xl">
+                <Receipt className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-800">
+                  Ficha Financiera y Plan de Pagos
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  {cuenta.frentista_nombre || 'Sin frentista'} • {cuenta.calle} {cuenta.numero || 'S/N'}{' '}
+                  (Clave: {cuenta.clave || '-'})
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Resumen Superior del Lote */}
+          <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
+            <div>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold">Costo Obra</span>
+              <span className="font-bold text-slate-800">${costoObra.toLocaleString('es-AR')}</span>
+            </div>
+            <div>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold">Conexión Gabinete</span>
+              <span className="font-bold text-slate-800">
+                {cuenta.conexion_gabinete ? `$${servDom.toLocaleString('es-AR')}` : 'No Incluye'}
               </span>
-              <h3 className="text-base font-bold text-slate-800">
-                Plan de Cuotas • {cuenta.frentista_nombre || cuenta.titular_nombre || 'Sin Titular'}
-              </h3>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {cuenta.calle} {cuenta.numero || 'S/N'} — Mza: {cuenta.mza || '-'} | Lote Mun: {cuenta.lote_catast_muni || '-'}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Tarjetas de Resumen (5 Columnas) */}
-        <div className="p-5 bg-slate-50/50 border-b border-slate-100 grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs shrink-0">
-          <div className="bg-white p-3 rounded-lg border border-slate-200/80 shadow-xs">
-            <span className="text-[10px] uppercase font-bold text-slate-400">Metros Frente</span>
-            <p className="text-sm font-bold text-slate-800 font-mono mt-0.5">
-              {Number(cuenta.metros_frente).toFixed(2)} m
-            </p>
-          </div>
-
-          <div className="bg-white p-3 rounded-lg border border-slate-200/80 shadow-xs">
-            <span className="text-[10px] uppercase font-bold text-slate-400">Costo Obra</span>
-            <p className="text-sm font-bold text-slate-800 font-mono mt-0.5">
-              {formatCurrencyAR(cuenta.costo_obra)}
-            </p>
-          </div>
-
-          <div className="bg-white p-3 rounded-lg border border-slate-200/80 shadow-xs">
-            <span className="text-[10px] uppercase font-bold text-slate-400">Serv. Dom</span>
-            <p className="text-sm font-bold text-slate-800 font-mono mt-0.5">
-              {formatCurrencyAR(cuenta.serv_dom)}
-            </p>
-          </div>
-
-          <div className="bg-white p-3 rounded-lg border border-slate-200/80 shadow-xs">
-            <span className="text-[10px] uppercase font-bold text-slate-400">Cuota Base Obra</span>
-            <p className="text-sm font-bold text-emerald-600 font-mono mt-0.5">
-              {formatCurrencyAR(cuotaBaseSemilla)}
-            </p>
-          </div>
-
-          <div className="bg-white p-3 rounded-lg border border-slate-200/80 shadow-xs col-span-2 sm:col-span-1">
-            <span className="text-[10px] uppercase font-bold text-brand-600">Costo Total</span>
-            <p className="text-sm font-black text-brand-600 font-mono mt-0.5">
-              {formatCurrencyAR(cuenta.costo_total)}
-            </p>
-          </div>
-        </div>
-
-        {/* Tabla con Sticky Header y Scroll */}
-        <div className="p-6 flex-1 overflow-hidden flex flex-col">
-          {loading ? (
-            <div className="p-12 flex flex-col items-center justify-center gap-2 text-slate-400 my-auto">
-              <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
-              <span className="text-xs">Cargando cuotas desde el servidor...</span>
+            <div>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold">Costo Total Inicial</span>
+              <span className="font-bold text-brand-600">
+                ${(costoObra + servDom).toLocaleString('es-AR')}
+              </span>
             </div>
-          ) : cuotas.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-xl my-auto">
-              No hay cuotas emitidas registradas para este inmueble.
+            <div>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold">Frente / Metros</span>
+              <span className="font-bold text-slate-800">{metrosFrenteNum.toFixed(2)} m</span>
             </div>
-          ) : (
-            <div className="border border-slate-200 rounded-xl overflow-x-auto overflow-y-auto max-h-[50vh] relative shadow-xs">
-              <table className="w-full text-left text-xs text-slate-600 whitespace-nowrap min-w-[950px] border-collapse">
-                <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200 sticky top-0 z-[5]">
-                  <tr>
-                    <th className="px-3 py-3 bg-slate-50 sticky top-0">Cuota</th>
-                    <th className="px-3 py-3 bg-slate-50 sticky top-0">Concepto</th>
-                    <th className="px-3 py-3 bg-slate-50 sticky top-0">Período</th>
-                    <th className="px-3 py-3 bg-slate-50 sticky top-0">Vencimiento</th>
-                    <th className="px-3 py-3 bg-slate-50 text-right sticky top-0">CUOTA</th>
-                    <th className="px-3 py-3 bg-slate-50 text-center sticky top-0">AJUSTE (%) / ICC</th>
-                    <th className="px-3 py-3 bg-slate-50 text-right sticky top-0">CUOTA ACTUALIZADA</th>
-                    <th className="px-3 py-3 bg-slate-50 text-center sticky top-0">Estado</th>
-                    <th className="px-3 py-3 bg-slate-50 sticky top-0">Cobro / Comprobante</th>
-                    <th className="px-3 py-3 bg-slate-50 text-center sticky top-0">Acción</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-normal">
-                  {cuotasCalculadas.map((c) => {
-                    const isPagada = c.estado === 'PAGADA';
-                    const isVencida = c.estado === 'PENDIENTE' && new Date(c.fecha_vencimiento) < new Date();
+          </div>
 
-                    return (
-                      <tr key={c.id_cuota} className="hover:bg-slate-50/70 transition">
-                        <td className="px-3 py-2.5 font-mono font-bold text-slate-800">
-                          #{c.nro_cuota.toString().padStart(2, '0')}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                            {c.concepto || 'RED_OBRA'}
+          {/* Cuerpo del Modal */}
+          <div className="flex-1 overflow-y-auto p-6">
+            {loadingCuotas ? (
+              <div className="py-20 flex flex-col items-center justify-center gap-2 text-slate-400">
+                <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
+                <span className="text-xs">Cargando estado del contrato...</span>
+              </div>
+            ) : cuotas.length === 0 ? (
+              /* Vista cuando el lote no tiene cuotas */
+              !modoEmision ? (
+                <div className="py-16 text-center space-y-4">
+                  <div className="inline-flex p-3 bg-amber-50 text-amber-600 rounded-full">
+                    <AlertCircle className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-slate-800">
+                      Inmueble sin Plan de Pagos Emitido
+                    </h4>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                      Este lote se encuentra registrado en el padrón pero aún no cuenta con un contrato
+                      formal ni cuotas de amortización generadas.
+                    </p>
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setModoEmision(true)}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition shadow-sm"
+                    >
+                      <PlusCircle className="w-4 h-4" /> + Generar Plan de Pagos
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Formulario de Emisión */
+                <form onSubmit={handleEmitirPlan} className="space-y-6">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setModoEmision(false)}
+                        className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 transition"
+                      >
+                        <ArrowLeft className="w-4 h-4" />
+                      </button>
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                        Configuración del Nuevo Plan de Pagos
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-md font-semibold">
+                      Emisión de Contrato
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Modalidad de Ajuste
+                      </label>
+                      <select
+                        value={tipoIndexacion}
+                        onChange={(e) => setTipoIndexacion(e.target.value as 'ICC' | 'FIJO')}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:border-brand-500 focus:bg-white outline-none transition"
+                      >
+                        <option value="ICC">Ajustable por ICC (Índice Costo Construcción)</option>
+                        <option value="FIJO">Cuotas Fijas (Sin ajuste)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Anticipo / Inversión Inicial ($)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1000"
+                          value={anticipo}
+                          onChange={(e) => setAnticipo(Number(e.target.value) || 0)}
+                          className="w-full pl-7 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-medium focus:border-brand-500 focus:bg-white outline-none transition"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Plan Cuotas Obra
+                      </label>
+                      <select
+                        value={planCuotasObra}
+                        onChange={(e) => setPlanCuotasObra(Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:border-brand-500 focus:bg-white outline-none transition"
+                      >
+                        <option value={1}>1 Cuota (Contado)</option>
+                        <option value={3}>3 Cuotas</option>
+                        <option value={6}>6 Cuotas</option>
+                        <option value={12}>12 Cuotas</option>
+                        <option value={18}>18 Cuotas</option>
+                        <option value={24}>24 Cuotas</option>
+                        <option value={36}>36 Cuotas</option>
+                      </select>
+                    </div>
+
+                    {cuenta.conexion_gabinete && (
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Plan Cuotas Gabinete
+                        </label>
+                        <select
+                          value={planCuotasGabinete}
+                          onChange={(e) => setPlanCuotasGabinete(Number(e.target.value))}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:border-brand-500 focus:bg-white outline-none transition"
+                        >
+                          <option value={1}>1 Cuota (Contado)</option>
+                          <option value={3}>3 Cuotas</option>
+                          <option value={6}>6 Cuotas</option>
+                        </select>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Fecha Primer Vencimiento
+                      </label>
+                      <input
+                        type="date"
+                        value={fechaPrimerVencimiento}
+                        onChange={(e) => setFechaPrimerVencimiento(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:border-brand-500 focus:bg-white outline-none transition"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Panel de Simulación */}
+                  <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                      <TrendingUp className="w-4 h-4 text-brand-600" />
+                      <span>Simulación Reactiva de Amortización</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="bg-white p-3 rounded-lg border border-slate-200">
+                        <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                          Saldo a Financiar (Obra)
+                        </span>
+                        <span className="text-sm font-bold font-mono text-slate-900">
+                          ${saldoFinanciarObra.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-lg border border-slate-200">
+                        <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                          Cuota Base Obra Estimada
+                        </span>
+                        <span className="text-sm font-bold font-mono text-emerald-600">
+                          ${cuotaBaseObraSimulada.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block font-sans">
+                          x {planCuotasObra} mes(es)
+                        </span>
+                      </div>
+
+                      {cuenta.conexion_gabinete && (
+                        <div className="bg-white p-3 rounded-lg border border-slate-200">
+                          <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                            Cuota Gabinete Estimada
                           </span>
-                        </td>
-                        <td className="px-3 py-2.5 font-medium text-slate-700">{c.periodo}</td>
-                        <td className="px-3 py-2.5 text-slate-500 font-mono text-[11px]">
-                          {formatDateAR(c.fecha_vencimiento)}
-                        </td>
-                        
-                        {/* 1. CUOTA BASE ARRASTRADA */}
-                        <td className="px-3 py-2.5 font-mono text-right text-slate-600">
-                          ${formatCurrencyAR(c.cuotaBaseCalculada)}
-                        </td>
+                          <span className="text-sm font-bold font-mono text-blue-600">
+                            ${cuotaBaseGabineteSimulada.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block font-sans">
+                            x {planCuotasGabinete} mes(es)
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-                        {/* 2. AJUSTE (%) / ICC */}
-                        <td className="px-3 py-2 text-center">
-                          {isPagada ? (
-                            <span
-                              className={`text-[11px] font-mono font-bold ${
-                                c.porcentajeAplicado > 0.001
-                                  ? 'text-amber-700'
-                                  : c.porcentajeAplicado < -0.001
-                                  ? 'text-rose-600'
-                                  : 'text-slate-500'
-                              }`}
-                            >
-                              {c.porcentajeAplicado > 0.001 ? '+' : ''}
-                              {c.porcentajeAplicado.toFixed(2)}%
-                            </span>
-                          ) : (
-                            <div className="inline-flex items-center gap-1">
-                              <div className="relative w-20">
+                  <div className="flex items-center justify-end gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setModoEmision(false)}
+                      disabled={submittingPlan}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submittingPlan}
+                      className="inline-flex items-center gap-2 px-5 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition shadow-xs"
+                    >
+                      {submittingPlan ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" /> Emitiendo...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" /> Confirmar y Emitir Plan
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )
+            ) : (
+              /* Tabla de Cuotas con Índice Parametrizable y Cobro */
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+                <table className="w-full text-left text-xs text-slate-600">
+                  <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2.5 text-center">Nº</th>
+                      <th className="px-3 py-2.5">Concepto</th>
+                      <th className="px-3 py-2.5">Período</th>
+                      <th className="px-3 py-2.5">Vencimiento</th>
+                      <th className="px-3 py-2.5 text-right">Monto Base</th>
+                      <th className="px-3 py-2.5 text-center w-28">Índice / Coef.</th>
+                      <th className="px-3 py-2.5 text-right">Actualizado</th>
+                      <th className="px-3 py-2.5 text-center">Estado</th>
+                      <th className="px-3 py-2.5 text-center">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-mono">
+                    {cuotas.map((c) => {
+                      const estadoNormalizado = String(c.estado || '').toUpperCase().trim();
+                      const isPagado =
+                        estadoNormalizado === 'PAGADA' ||
+                        estadoNormalizado === 'PAGADO' ||
+                        estadoNormalizado === 'COBRADA';
+
+                      const indiceValor = Number(c.coeficiente_actualizacion || 1.0);
+
+                      return (
+                        <tr key={c.id_cuota} className="hover:bg-slate-50/70 transition">
+                          <td className="px-3 py-2.5 text-center font-bold text-slate-700">
+                            {c.nro_cuota ?? c.numero_cuota}
+                          </td>
+                          <td className="px-3 py-2.5 font-sans font-medium text-slate-800">
+                            {c.concepto === 'RED_OBRA' ? 'Cuota Obra' : c.concepto}
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-500 font-sans">
+                            {c.periodo || '-'}
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-500">
+                            {c.fecha_vencimiento
+                              ? new Date(c.fecha_vencimiento).toLocaleDateString('es-AR')
+                              : '-'}
+                          </td>
+
+                          {/* Monto Base */}
+                          <td className="px-3 py-2.5 text-right text-slate-600">
+                            ${Number(c.monto_base || 0).toLocaleString('es-AR', {
+                              minimumFractionDigits: 2,
+                            })}
+                          </td>
+
+                          {/* Columna Índice: Input editable si está pendiente, etiqueta fija si está pagada */}
+                          <td className="px-3 py-2.5 text-center">
+                            {isPagado ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200">
+                                {indiceValor.toFixed(4)}
+                              </span>
+                            ) : (
+                              <div className="inline-flex items-center justify-center">
                                 <input
                                   type="number"
-                                  step="0.01"
-                                  value={ajustesPorc[c.id_cuota] ?? 0}
-                                  onChange={(e) => handleAjusteChange(c.id_cuota, e.target.value)}
-                                  className="w-full px-1.5 py-0.5 pr-4 border border-slate-200 rounded text-right font-mono text-[11px] outline-none focus:border-brand-500 font-medium"
+                                  step="0.0001"
+                                  min="0"
+                                  value={indiceValor}
+                                  onChange={(e) =>
+                                    handleIndiceChange(c.id_cuota, parseFloat(e.target.value) || 0)
+                                  }
+                                  className="w-20 px-1.5 py-1 text-center font-mono font-bold text-slate-800 bg-white border border-slate-300 rounded-lg focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none text-xs shadow-xs"
+                                  title="Ajustar coeficiente multiplicador"
                                 />
-                                <span className="absolute right-1 top-0.5 text-[10px] text-slate-400">%</span>
                               </div>
+                            )}
+                          </td>
+
+                          {/* Monto Actualizado reactivo */}
+                          <td className="px-3 py-2.5 text-right font-bold text-slate-900">
+                            ${Number(c.monto_actualizado || c.monto_base || 0).toLocaleString('es-AR', {
+                              minimumFractionDigits: 2,
+                            })}
+                          </td>
+
+                          {/* Estado */}
+                          <td className="px-3 py-2.5 text-center font-sans">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                isPagado
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}
+                            >
+                              {c.estado}
+                            </span>
+                          </td>
+
+                          {/* Acción de Cobro */}
+                          <td className="px-3 py-2.5 text-center font-sans">
+                            {isPagado ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50/60 px-2 py-1 rounded-lg border border-emerald-200">
+                                <Check className="w-3.5 h-3.5" /> Pagada
+                              </span>
+                            ) : (
                               <button
                                 type="button"
-                                disabled={loadingIcc === c.id_cuota}
-                                onClick={() => handleConsultarIcc(c)}
-                                title="Consultar índice ICC oficial"
-                                className="p-1 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded border border-amber-200 transition disabled:opacity-50"
+                                onClick={() => setCuotaACobrar(c)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold shadow-xs transition"
                               >
-                                <RefreshCw
-                                  className={`w-3 h-3 ${loadingIcc === c.id_cuota ? 'animate-spin text-amber-800' : ''}`}
-                                />
+                                <CreditCard className="w-3 h-3" /> Cobrar
                               </button>
-                            </div>
-                          )}
-                        </td>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
 
-                        {/* 3. CUOTA ACTUALIZADA */}
-                        <td className="px-3 py-2.5 font-mono text-right font-bold text-slate-900">
-                          {formatCurrencyAR(c.cuotaActualizadaCalculada)}
-                        </td>
-
-                        <td className="px-3 py-2.5 text-center">
-                          {isPagada ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              <CheckCircle2 className="w-3 h-3" /> Pagada
-                            </span>
-                          ) : isVencida ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                              <AlertTriangle className="w-3 h-3" /> Vencida
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                              <Clock className="w-3 h-3" /> Pendiente
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2.5 font-mono text-[11px] text-slate-500">
-                          {c.fecha_pago ? `${formatDateAR(c.fecha_pago)} (${c.comprobante || c.medio_pago || 'S/N'})` : '-'}
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          {!isPagada && (
-                            <button
-                              onClick={() => {
-                                setSelectedCuotaCobro({
-                                  ...c,
-                                  monto_actualizado: Number(c.cuotaActualizadaCalculada.toFixed(2)),
-                                });
-                              }}
-                              className="px-2.5 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded text-[10px] font-bold flex items-center gap-1 mx-auto transition shadow-xs"
-                            >
-                              <CreditCard className="w-3 h-3" /> Cobrar
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 flex justify-end shrink-0">
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold transition"
-          >
-            Cerrar Ficha
-          </button>
+          {/* Pie del Modal */}
+          <div className="px-6 py-3 border-t border-slate-100 flex items-center justify-end bg-slate-50/50">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold transition"
+            >
+              Cerrar Ficha
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Modal Secundario de Cobro */}
+      {/* Modal Hijo: Imputación de Cobro */}
       <CobrarCuotaModal
-        cuota={selectedCuotaCobro}
-        isOpen={Boolean(selectedCuotaCobro)}
-        onClose={() => setSelectedCuotaCobro(null)}
-        onSuccess={fetchCuotas}
+        cuota={cuotaACobrar}
+        isOpen={Boolean(cuotaACobrar)}
+        onClose={() => setCuotaACobrar(null)}
         showToast={showToast}
+        onSuccess={async () => {
+          await fetchCuotas(cuenta.id_inmueble);
+          onPlanCreado?.();
+        }}
       />
-    </div>
+    </>
   );
 };

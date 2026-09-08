@@ -2,7 +2,7 @@ export interface CreateContratoDTO {
   id_inmueble: number;
   plan_cuotas_obra: number;
   plan_cuotas_gabinete?: number | null;
-  tipo_indexacion?: string;
+  tipo_indexacion?: 'ICC' | 'FIJO';
   monto_anticipo?: number | null;
   fecha_primer_vencimiento: string; // Formato 'YYYY-MM-DD'
 }
@@ -11,10 +11,10 @@ export interface CuotaInsertDTO {
   id_contrato: number;
   concepto: 'RED_OBRA' | 'GABINETE' | 'ANTICIPO';
   nro_cuota: number;
-  periodo: string; // 'YYYY-MM'
+  periodo: string; // Formato 'YYYY-MM'
   monto_base: number;
   monto_actualizado: number;
-  fecha_vencimiento: string; // 'YYYY-MM-DD'
+  fecha_vencimiento: string; // Formato 'YYYY-MM-DD'
   estado: 'PENDIENTE' | 'PAGADA' | 'VENCIDA';
 }
 

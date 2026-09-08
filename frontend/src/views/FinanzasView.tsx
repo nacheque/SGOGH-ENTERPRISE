@@ -22,22 +22,24 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedCuentaModal, setSelectedCuentaModal] = useState<CuentaCorrienteRow | null>(null);
 
+  // Declarar fetchData afuera para poder reutilizarla
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [obrasData, inmueblesData] = await Promise.all([
+        getObras(),
+        getInmuebles(),
+      ]);
+      setObras(obrasData);
+      setInmuebles(inmueblesData);
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [obrasData, inmueblesData] = await Promise.all([
-          getObras(),
-          getInmuebles(),
-        ]);
-        setObras(obrasData);
-        setInmuebles(inmueblesData);
-      } catch (err: any) {
-        showToast(err.message, 'error');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchData();
   }, []);
 
@@ -158,6 +160,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
             isOpen={Boolean(selectedCuentaModal)}
             onClose={() => setSelectedCuentaModal(null)}
             showToast={showToast}
+            onPlanCreado={fetchData} // <-- Vuelve a cargar getInmuebles() y refresca la tabla
           />
         </div>
       )}

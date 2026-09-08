@@ -6,10 +6,12 @@ import {
   CreateInmuebleConPersonasDTO,
   PersonaInputDTO,
   InmuebleCompletoResponseDTO,
-} from '../types/inmueble.types';
+} from '../types/inmueble.types'; // Ajustar a 'inmueble.types' según corresponda
 
 export class InmueblesRepository {
-  // Consultar inmuebles uniendo obra, personas y la información del contrato emitido
+  /**
+   * Consultar inmuebles uniendo obra, personas y la información del contrato emitido
+   */
   async getAll(): Promise<InmuebleResponseDTO[]> {
     const query = `
       SELECT 
@@ -34,8 +36,8 @@ export class InmueblesRepository {
         i.conexion_gabinete,
         COALESCE(i.gabinete_colocado, FALSE) AS gabinete_colocado,
         i.observacion,
-
-        -- Información de Contrato y Cuota Semilla
+        
+        -- Datos del Contrato Real
         c.id_contrato,
         c.plan_cuotas_obra,
         c.plan_cuotas_gabinete,
@@ -64,7 +66,9 @@ export class InmueblesRepository {
     return result.rows;
   }
 
-  // Alta básica de lote / inmueble
+  /**
+   * Alta básica de lote / inmueble
+   */
   async create(data: CreateInmuebleDTO): Promise<InmuebleResponseDTO> {
     const query = `
       INSERT INTO inmuebles (

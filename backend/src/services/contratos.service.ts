@@ -9,7 +9,7 @@ export class ContratosService {
   }
 
   async emitirContrato(dto: CreateContratoDTO): Promise<ContratoResponseDTO> {
-    // 1. Validaciones iniciales de presencia
+    // 1. Validaciones iniciales
     if (!dto.id_inmueble || !dto.plan_cuotas_obra || !dto.fecha_primer_vencimiento) {
       throw new Error(
         'Faltan campos obligatorios: id_inmueble, plan_cuotas_obra y fecha_primer_vencimiento son requeridos.'
@@ -20,18 +20,19 @@ export class ContratosService {
       throw new Error('El plan de cuotas de obra debe ser mayor a 0.');
     }
 
+    // 2. Verificar existencia de inmueble
     const inmueble = await this.repo.getInmuebleConObra(dto.id_inmueble);
     if (!inmueble) {
       throw new Error(`No se encontró el inmueble con ID ${dto.id_inmueble}.`);
     }
 
-    // 2. Validación de contrato existente
+    // 3. Evitar contratos duplicados sobre el mismo inmueble (Fail Fast)
     const contratoExistente = await this.repo.getContratoByInmuebleId(dto.id_inmueble);
     if (contratoExistente) {
       throw new Error(`El inmueble #${dto.id_inmueble} ya posee un contrato de financiación emitido.`);
     }
 
-    // 3. Costo total de obra y gabinete según catálogo
+    // 4. Calcular costo total de obra y gabinete según catálogo
     const metros = Number(inmueble.metros_frente);
     const precioMetro = Number(inmueble.precio_x_metro);
     const costoGabineteCatalogo = Number(inmueble.costo_gabinete);
@@ -45,38 +46,35 @@ export class ContratosService {
       montoTotalGabinete = costoGabineteCatalogo;
     }
 
-    // 4. Validación de Anticipo
+    // 5. Validaciones de Anticipo
     const anticipo = dto.monto_anticipo ? Number(dto.monto_anticipo) : 0;
     if (anticipo < 0) {
-      throw new Error('El anticipo no puede ser negativo.');
+      throw new Error('El anticipo no puede ser un valor negativo.');
     }
     if (anticipo >= montoTotalObra) {
-      throw new Error('El anticipo no puede ser igual o superior al costo total de la obra.');
+      throw new Error('El anticipo no puede ser igual o mayor al costo total de la obra.');
     }
 
     const cuotasParaGenerar: CuotaInsertDTO[] = [];
     const fechaVencimientoInicial = new Date(dto.fecha_primer_vencimiento);
 
-    // 5. Generación de Cuota 0 (ANTICIPO) si corresponde
+    // 6. Generación de Cuota 0 (ANTICIPO) si corresponde
     if (anticipo > 0) {
-      const periodoAnticipo = `${fechaVencimientoInicial.getFullYear()}-${String(
-        fechaVencimientoInicial.getMonth() + 1
-      ).padStart(2, '0')}`;
-      const fechaVencAnticipoStr = fechaVencimientoInicial.toISOString().split('T')[0];
-
       cuotasParaGenerar.push({
-        id_contrato: 0,
+        id_contrato: 0, // Asignado en la transacción SQL del repositorio
         concepto: 'ANTICIPO',
         nro_cuota: 0,
-        periodo: periodoAnticipo,
-        monto_base: anticipo,
-        monto_actualizado: anticipo,
-        fecha_vencimiento: fechaVencAnticipoStr,
+        periodo: `${fechaVencimientoInicial.getFullYear()}-${String(
+          fechaVencimientoInicial.getMonth() + 1
+        ).padStart(2, '0')}`,
+        monto_base: Number(anticipo.toFixed(2)),
+        monto_actualizado: Number(anticipo.toFixed(2)),
+        fecha_vencimiento: dto.fecha_primer_vencimiento,
         estado: 'PENDIENTE',
       });
     }
 
-    // 6. Fraccionamiento del saldo financiado de RED_OBRA
+    // 7. Fraccionamiento del saldo financiado de RED_OBRA
     const saldoFinanciarObra = Number((montoTotalObra - anticipo).toFixed(2));
     const montoBaseObra = Number((saldoFinanciarObra / dto.plan_cuotas_obra).toFixed(2));
 
@@ -84,46 +82,40 @@ export class ContratosService {
       const fechaVenc = new Date(fechaVencimientoInicial);
       fechaVenc.setMonth(fechaVenc.getMonth() + (i - 1));
 
-      const periodo = `${fechaVenc.getFullYear()}-${String(fechaVenc.getMonth() + 1).padStart(2, '0')}`;
-      const fechaVencStr = fechaVenc.toISOString().split('T')[0];
-
       cuotasParaGenerar.push({
         id_contrato: 0,
         concepto: 'RED_OBRA',
         nro_cuota: i,
-        periodo,
+        periodo: `${fechaVenc.getFullYear()}-${String(fechaVenc.getMonth() + 1).padStart(2, '0')}`,
         monto_base: montoBaseObra,
         monto_actualizado: montoBaseObra,
-        fecha_vencimiento: fechaVencStr,
+        fecha_vencimiento: fechaVenc.toISOString().split('T')[0],
         estado: 'PENDIENTE',
       });
     }
 
-    // 7. Generación de cuotas de GABINETE (si aplica)
+    // 8. Generación de cuotas de GABINETE (si aplica)
     if (montoTotalGabinete && planGabinete) {
       const montoBaseGabinete = Number((montoTotalGabinete / planGabinete).toFixed(2));
       for (let i = 1; i <= planGabinete; i++) {
         const fechaVenc = new Date(fechaVencimientoInicial);
         fechaVenc.setMonth(fechaVenc.getMonth() + (i - 1));
 
-        const periodo = `${fechaVenc.getFullYear()}-${String(fechaVenc.getMonth() + 1).padStart(2, '0')}`;
-        const fechaVencStr = fechaVenc.toISOString().split('T')[0];
-
         cuotasParaGenerar.push({
           id_contrato: 0,
           concepto: 'GABINETE',
           nro_cuota: i,
-          periodo,
+          periodo: `${fechaVenc.getFullYear()}-${String(fechaVenc.getMonth() + 1).padStart(2, '0')}`,
           monto_base: montoBaseGabinete,
           monto_actualizado: montoBaseGabinete,
-          fecha_vencimiento: fechaVencStr,
+          fecha_vencimiento: fechaVenc.toISOString().split('T')[0],
           estado: 'PENDIENTE',
         });
       }
     }
 
-    // 8. Persistencia atómica
-    const tipoIndexacionFinal = dto.tipo_indexacion ? dto.tipo_indexacion.toUpperCase().trim() : 'ICC';
+    // 9. Persistencia transaccional
+    const tipoIndexacionFinal = (dto.tipo_indexacion || 'ICC').toUpperCase().trim();
 
     return await this.repo.emitirContratoConCuotas(
       {
