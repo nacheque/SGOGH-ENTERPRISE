@@ -1,33 +1,67 @@
 import { Request, Response, NextFunction } from 'express';
 import { ObrasRepository } from '../repositories/obras.repository';
 
-const repo = new ObrasRepository();
+const obrasRepo = new ObrasRepository();
 
-// GET /api/v1/obras
-export const getObras = async (req: Request, res: Response, next: NextFunction) => {
+export const getObras = async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const obras = await repo.findAll();
-    res.status(200).json({ status: 'success', data: obras });
+    const obras = await obrasRepo.getAll();
+    res.status(200).json({
+      status: 'success',
+      data: obras,
+    });
   } catch (error) {
-    next(error); // Delega el error al errorHandler centralizado
+    next(error);
   }
 };
 
-// POST /api/v1/obras
 export const createObra = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { nombre_obra, precio_x_metro } = req.body;
+    const { nombre_obra, ubicacion, precio_x_metro, costo_gabinete, anio, estado } = req.body;
 
-    // Validación básica de campos requeridos por la tabla
-    if (!nombre_obra || precio_x_metro === undefined) {
+    if (!nombre_obra || precio_x_metro === undefined || costo_gabinete === undefined) {
       return res.status(400).json({
         status: 'error',
-        message: 'Los campos "nombre_obra" y "precio_x_metro" son obligatorios.',
+        message: 'Los campos nombre_obra, precio_x_metro y costo_gabinete son obligatorios.',
       });
     }
 
-    const nuevaObra = await repo.create(req.body);
-    res.status(201).json({ status: 'success', data: nuevaObra });
+    const nuevaObra = await obrasRepo.create({
+      nombre_obra,
+      ubicacion,
+      precio_x_metro: Number(precio_x_metro),
+      costo_gabinete: Number(costo_gabinete),
+      anio: anio ? Number(anio) : null,
+      estado,
+    });
+
+    res.status(201).json({
+      status: 'success',
+      data: nuevaObra,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getPadronByObra = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const idObra = Number(id);
+
+    if (isNaN(idObra)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'El parámetro "id" debe ser un valor numérico válido.',
+      });
+    }
+
+    const padron = await obrasRepo.getPadronByObraId(idObra);
+
+    res.status(200).json({
+      status: 'success',
+      data: padron,
+    });
   } catch (error) {
     next(error);
   }

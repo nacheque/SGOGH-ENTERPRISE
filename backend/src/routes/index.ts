@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { getHealth } from '../controllers/health.controller';
-import { getObras, createObra } from '../controllers/obras.controller';
 import { getPersonas, createPersona } from '../controllers/personas.controller';
 import { getInmuebles, createInmueble } from '../controllers/inmuebles.controller';
+import obrasRoutes from './obras.routes';
 import indicesRoutes from './indices.routes';
 import contratosRoutes from './contratos.routes';
 import pagosRoutes from './pagos.routes';
@@ -13,9 +13,8 @@ const router = Router();
 // Health Check (Actividad 3.2.1)
 router.get('/health', getHealth);
 
-// Módulo Obras (Actividad 3.2.2)
-router.get('/obras', getObras);
-router.post('/obras', createObra);
+// Módulo Obras (Catálogo Maestro y Padrón Territorial)
+router.use('/obras', obrasRoutes);
 
 // Módulo Personas (Actividad 3.2.3)
 router.get('/personas', getPersonas);
@@ -25,11 +24,11 @@ router.post('/personas', createPersona);
 router.get('/inmuebles', getInmuebles);
 router.post('/inmuebles', createInmueble);
 
-// Indices de Actualizacion de Cuotas
-router.use('/indices', indicesRoutes)
+// Índices de Actualización de Cuotas
+router.use('/indices', indicesRoutes);
 
 // Contratos de obras
-router.use('/contratos', contratosRoutes)
+router.use('/contratos', contratosRoutes);
 
 // Pagos y Cuotas
 router.use('/pagos', pagosRoutes);

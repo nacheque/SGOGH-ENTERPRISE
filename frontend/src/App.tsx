@@ -1,36 +1,45 @@
 import { useState, useEffect } from 'react';
-import { HardHat, Users, Building2, Activity, Landmark } from 'lucide-react';
+import { HardHat, Landmark, Activity } from 'lucide-react';
 import { ObrasView } from './views/ObrasView';
-import { PersonasView } from './views/PersonasView';
-import { InmueblesView } from './views/InmueblesView';
 import { FinanzasView } from './views/FinanzasView';
 import { Toast } from './components/common/Toast';
 import api from './api/axios';
 
-// Definición de las pestañas principales del Dashboard
-type Tab = 'finanzas' | 'obras' | 'personas' | 'inmuebles';
+// Consolidación en los 2 módulos principales
+type Tab = 'obras' | 'finanzas';
 
 export default function App() {
   // -------------------------------------------------------------
   // ESTADOS GLOBALES DE NAVEGACIÓN Y SISTEMA
   // -------------------------------------------------------------
-  const [activeTab, setActiveTab] = useState<Tab>('finanzas');
+  const [activeTab, setActiveTab] = useState<Tab>('obras');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
 
-  // Función puente para emitir notificaciones desde cualquier subvista
-  const showToast = (message: string, type: 'success' | 'error') => {
+  // Emisor centralizado de notificaciones Toast para las subvistas
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
   };
 
   // -------------------------------------------------------------
-  // HEALTH CHECK AUTOMÁTICO AL MONTAR LA APLICACIÓN
+  // HEALTH CHECK AUTOMÁTICO AL MONTAR Y PERIÓDICO
   // -------------------------------------------------------------
   // Comprueba la conectividad activa con el backend y PostgreSQL en AWS Lightsail
   useEffect(() => {
-    api.get('/health')
-      .then(() => setBackendStatus('online'))
-      .catch(() => setBackendStatus('offline'));
+    const checkStatus = () => {
+      api.get('/health')
+        .then(() => setBackendStatus('online'))
+        .catch(() => {
+          // Fallback a /obras por si la ruta /health no está expuesta directamente
+          api.get('/obras')
+            .then(() => setBackendStatus('online'))
+            .catch(() => setBackendStatus('offline'));
+        });
+    };
+
+    checkStatus();
+    const interval = setInterval(checkStatus, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -51,19 +60,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Menú de Navegación por Módulos */}
-          
-          <button
-              onClick={() => setActiveTab('finanzas')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${
-                activeTab === 'finanzas'
-                  ? 'bg-brand-600 text-white shadow-md'
-                  : 'hover:bg-cecsa-hover text-slate-400'
-              }`}
-            >
-              <Landmark className="w-4 h-4" /> SG Adm. y Finanzas
-            </button>
-          
+          {/* Menú de Navegación Consolidado (2 Módulos) */}
           <nav className="space-y-1">
             <button
               onClick={() => setActiveTab('obras')}
@@ -77,26 +74,21 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => setActiveTab('personas')}
+              onClick={() => setActiveTab('finanzas')}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${
-                activeTab === 'personas'
+                activeTab === 'finanzas'
                   ? 'bg-brand-600 text-white shadow-md'
                   : 'hover:bg-cecsa-hover text-slate-400'
               }`}
             >
-              <Users className="w-4 h-4" /> Padrón de Personas
+              <Landmark className="w-4 h-4" /> SG Adm. y Finanzas
             </button>
 
-            <button
-              onClick={() => setActiveTab('inmuebles')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${
-                activeTab === 'inmuebles'
-                  ? 'bg-brand-600 text-white shadow-md'
-                  : 'hover:bg-cecsa-hover text-slate-400'
-              }`}
-            >
-              <Building2 className="w-4 h-4" /> Catastro Inmuebles
-            </button>
+            {/* Accesos archivados/ocultos: el padrón ahora se gestiona dentro de cada obra */}
+            {/* 
+            <button onClick={() => setActiveTab('personas')} ...>Padrón de Personas</button>
+            <button onClick={() => setActiveTab('inmuebles')} ...>Catastro Inmuebles</button>
+            */}
           </nav>
         </div>
 
@@ -127,22 +119,18 @@ export default function App() {
       {/* ========================================================= */}
       <main className="flex-1 flex flex-col min-w-0">
         {/* Header Superior */}
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shadow-sm">
+        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shadow-sm shrink-0">
           <h2 className="text-base font-bold text-slate-800">
-            {activeTab === 'finanzas' && 'Módulo 7 • SG Administración y Finanzas'}
             {activeTab === 'obras' && 'Módulo 1 • Gestión de Obras de Infraestructura'}
-            {activeTab === 'personas' && 'Módulo 2 • Padrón General de Personas y Titulares'}
-            {activeTab === 'inmuebles' && 'Módulo 3 • Catastro, Lotes y Vinculaciones'}
+            {activeTab === 'finanzas' && 'Módulo 7 • SG Administración y Finanzas'}
           </h2>
-          <span className="text-xs text-slate-400 font-medium font-mono">Sprint 1 | Build 1.0</span>
+          <span className="text-xs text-slate-400 font-medium font-mono">Sprint 3 | Build 2.0</span>
         </header>
 
-        {/* Contenedor dinámico según pestaña activa */}
+        {/* Contenedor dinámico de la vista activa */}
         <div className="p-8 flex-1 overflow-y-auto">
-          {activeTab === 'finanzas' && <FinanzasView showToast={showToast} />}
           {activeTab === 'obras' && <ObrasView showToast={showToast} />}
-          {activeTab === 'personas' && <PersonasView showToast={showToast} />}
-          {activeTab === 'inmuebles' && <InmueblesView showToast={showToast} />}
+          {activeTab === 'finanzas' && <FinanzasView showToast={showToast} />}
         </div>
       </main>
 
