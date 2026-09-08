@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { InmueblesRepository } from '../repositories/inmuebles.repository';
+import { InmueblesService } from '../services/inmuebles.service';
 
 const inmueblesRepo = new InmueblesRepository();
 
@@ -61,6 +62,37 @@ export const createInmueble = async (req: Request, res: Response, next: NextFunc
       data: nuevoInmueble,
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+const inmueblesService = new InmueblesService();
+
+export const createInmuebleConPersonas = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const idObra = Number(id);
+
+    const nuevoInmueble = await inmueblesService.registrarInmuebleConPersonas(idObra, req.body);
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Inmueble y personas asociadas registrados exitosamente.',
+      data: nuevoInmueble,
+    });
+  } catch (error: any) {
+    if (
+      error.message &&
+      (error.message.includes('obligatorio') ||
+        error.message.includes('mayor a 0') ||
+        error.message.includes('No se encontró la obra') ||
+        error.message.includes('válido'))
+    ) {
+      return res.status(400).json({
+        status: 'error',
+        message: error.message,
+      });
+    }
     next(error);
   }
 };

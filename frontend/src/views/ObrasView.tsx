@@ -13,6 +13,7 @@ import {
   XCircle, 
   Loader2 
 } from 'lucide-react';
+import { NuevoInmuebleModal } from '../components/obras/NuevoInmuebleModal';
 
 interface Props {
   showToast: (message: string, type: 'success' | 'error') => void;
@@ -39,6 +40,16 @@ export const ObrasView: React.FC<Props> = ({ showToast }) => {
     costo_gabinete: 0,
     estado: 'ACTIVA',
   });
+
+  // Modal de Alta de Padron de Obra
+  const [showNuevoInmuebleModal, setShowNuevoInmuebleModal] = useState(false);
+
+  // Función para refrescar el padrón al guardar con éxito
+  const handleInmuebleCreadoSuccess = () => {
+    if (obraSeleccionada) {
+      getPadronByObra(obraSeleccionada.id_obra).then((data) => setPadron(data));
+    }
+  };
 
   const fetchObrasList = async () => {
     try {
@@ -115,6 +126,7 @@ export const ObrasView: React.FC<Props> = ({ showToast }) => {
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Header Contextual */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
+            {/* LADO IZQUIERDO: Volver + Info de la Obra */}
             <div className="flex items-center gap-4">
               <button
                 onClick={() => setObraSeleccionada(null)}
@@ -146,16 +158,27 @@ export const ObrasView: React.FC<Props> = ({ showToast }) => {
               </div>
             </div>
 
-            {/* Buscador Padrón */}
-            <div className="relative w-72">
-              <input
-                type="text"
-                placeholder="Buscar frentista, calle, DNI..."
-                value={filtroPadron}
-                onChange={(e) => setFiltroPadron(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-brand-500 focus:bg-white font-medium transition"
-              />
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            {/* LADO DERECHO: Botón + Buscador (juntos en un flex) */}
+            <div className="flex items-center gap-3">
+              {/* AQUÍ VA EL BOTÓN */}
+              <button
+                onClick={() => setShowNuevoInmuebleModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition shadow-xs"
+              >
+                <Plus className="w-4 h-4" /> Cargar Inmueble al Padrón
+              </button>
+
+              {/* Buscador Padrón */}
+              <div className="relative w-64">
+                <input
+                  type="text"
+                  placeholder="Buscar frentista, calle, DNI..."
+                  value={filtroPadron}
+                  onChange={(e) => setFiltroPadron(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-brand-500 focus:bg-white font-medium transition"
+                />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              </div>
             </div>
           </div>
 
@@ -425,6 +448,19 @@ export const ObrasView: React.FC<Props> = ({ showToast }) => {
           )}
         </div>
       )}
+
+      {obraSeleccionada && (
+        <NuevoInmuebleModal
+          isOpen={showNuevoInmuebleModal}
+          idObra={obraSeleccionada.id_obra}
+          onClose={() => setShowNuevoInmuebleModal(false)}
+          onSuccess={handleInmuebleCreadoSuccess}
+          showToast={showToast || (() => {})}
+        />
+      )}
+
     </div>
+    
   );
+
 };

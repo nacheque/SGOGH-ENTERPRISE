@@ -1,3 +1,7 @@
+// ==========================================
+// 1. Tipos Base / CRUD Simple (Existentes)
+// ==========================================
+
 export interface CreateInmuebleDTO {
   clave_cliente: string;
   id_obra: number;
@@ -27,6 +31,54 @@ export interface InmuebleResponseDTO {
   id_titular: number | null;
   titular_nombre: string | null;
   titular_dni: string | null;
+  calle: string;
+  numero: string | null;
+  manzana: string | null;
+  lote_catast_muni: string | null;
+  lote_catast_provincia: string | null;
+  metros_frente: string | number;
+  conexion_gabinete: boolean;
+  gabinete_colocado: boolean;
+  observacion: string | null;
+}
+
+// ==========================================
+// 2. Tipos para Alta Atómica Compuesta
+// ==========================================
+
+export interface PersonaInputDTO {
+  nombre_completo: string;
+  dni?: string | null;
+  cuit?: string | null;
+  telefono?: string | null;
+  email?: string | null;
+  domicilio_particular?: string | null;
+}
+
+export interface CreateInmuebleConPersonasDTO {
+  clave_cliente?: string;
+  calle: string;
+  numero?: string | null;
+  manzana?: string | null;
+  lote_catast_muni?: string | null;
+  lote_catast_provincia?: string | null;
+  metros_frente: number;
+  conexion_gabinete?: boolean;
+  gabinete_colocado?: boolean;
+  observacion?: string | null;
+  frentista: PersonaInputDTO;
+  titular?: {
+    es_mismo_frentista: boolean;
+    datos?: PersonaInputDTO;
+  };
+}
+
+export interface InmuebleCompletoResponseDTO {
+  id_inmueble: number;
+  id_obra: number;
+  id_titular: number | null;
+  id_frentista: number;
+  clave_cliente: string;
   calle: string;
   numero: string | null;
   manzana: string | null;

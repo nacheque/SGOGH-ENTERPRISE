@@ -4,24 +4,24 @@ import { getObras } from '../api/obras.api';
 import { getInmuebles } from '../api/inmuebles.api';
 import { ResumenObraHeader } from '../components/finanzas/ResumenObraHeader';
 import { CuentaCorrienteTable } from '../components/finanzas/CuentaCorrienteTable';
-import { LayoutDashboard, ReceiptText } from 'lucide-react';
+import { LayoutDashboard } from 'lucide-react';
 import { PlanCuotasModal } from '../components/finanzas/PlanCuotasModal';
+import { ObrasView } from './ObrasView';
 
 interface Props {
   showToast: (msg: string, type: 'success' | 'error') => void;
 }
 
-type FinanzasSubTab = 'dashboard' | 'cuenta-corriente';
+type TabType = 'dashboard' | 'cuenta_corriente' | 'gestion_obras';
 
 export const FinanzasView: React.FC<Props> = ({ showToast }) => {
-  const [activeSubTab, setActiveSubTab] = useState<FinanzasSubTab>('cuenta-corriente');
+  const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [obras, setObras] = useState<Obra[]>([]);
   const [selectedObraId, setSelectedObraId] = useState<number | null>(null);
   const [inmuebles, setInmuebles] = useState<Inmueble[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedCuentaModal, setSelectedCuentaModal] = useState<CuentaCorrienteRow | null>(null);
 
-  // Cargar datos base del sistema
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -32,12 +32,6 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
         ]);
         setObras(obrasData);
         setInmuebles(inmueblesData);
-        
-        /*
-        if (obrasData.length > 0) {
-          setSelectedObraId(obrasData[0].id_obra);
-        }*/
-
       } catch (err: any) {
         showToast(err.message, 'error');
       } finally {
@@ -47,7 +41,6 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
     fetchData();
   }, []);
 
-  // Filtrar y calcular la cuenta corriente en base a los inmuebles y obra seleccionada  
   const cuentaCorrienteData: CuentaCorrienteRow[] = inmuebles
     .filter((inm) => selectedObraId === null || inm.id_obra === selectedObraId)
     .map((inm) => {
@@ -91,49 +84,55 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
 
   return (
     <div className="space-y-6">
-      {/* Selector de Sub-Pestañas */}
-      <div className="bg-white rounded-xl border border-slate-200/80 p-2 flex flex-wrap gap-2 shadow-sm">
+      {/* Barra de Pestañas Superior */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-4 mb-6">
+        
         <button
-          onClick={() => setActiveSubTab('dashboard')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
-            activeSubTab === 'dashboard'
+          onClick={() => setActiveTab('dashboard')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition ${
+            activeTab === 'dashboard'
               ? 'bg-brand-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
           }`}
         >
-          <LayoutDashboard className="w-4 h-4" />
           Dashboard de Cobranzas
         </button>
-
+        
         <button
-          onClick={() => setActiveSubTab('cuenta-corriente')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
-            activeSubTab === 'cuenta-corriente'
+          onClick={() => setActiveTab('cuenta_corriente')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition ${
+            activeTab === 'cuenta_corriente'
               ? 'bg-brand-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
           }`}
         >
-          <ReceiptText className="w-4 h-4" />
           Cuenta Corriente
         </button>
+
+        <button
+          onClick={() => setActiveTab('gestion_obras')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition ${
+            activeTab === 'gestion_obras'
+              ? 'bg-brand-600 text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          Gestión de Obras
+        </button>
+
+        
       </div>
 
-      {activeSubTab === 'dashboard' && (
-        <div className="bg-white rounded-xl border border-slate-200/80 p-8 text-center space-y-3">
-          <div className="inline-flex p-3 bg-blue-50 text-brand-600 rounded-full">
-            <LayoutDashboard className="w-8 h-8" />
-          </div>
-          <h3 className="text-base font-bold text-slate-800">
-            Dashboard de Cobranzas e Índices de Actualización
-          </h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto">
-            Se alimentará de los totales calculados en la Cuenta Corriente.
-          </p>
+      {/* PESTAÑA 1: GESTIÓN DE OBRAS */}
+      {activeTab === 'gestion_obras' && (
+        <div className="animate-in fade-in duration-150">
+          <ObrasView showToast={showToast} />
         </div>
       )}
 
-      {activeSubTab === 'cuenta-corriente' && (
-        <div className="space-y-6">
+      {/* PESTAÑA 2: CUENTA CORRIENTE */}
+      {activeTab === 'cuenta_corriente' && (
+        <div className="space-y-6 animate-in fade-in duration-150">
           <ResumenObraHeader
             obras={obras}
             selectedObraId={selectedObraId}
@@ -151,6 +150,21 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
             onClose={() => setSelectedCuentaModal(null)}
             showToast={showToast}
           />
+        </div>
+      )}
+
+      {/* PESTAÑA 3: DASHBOARD */}
+      {activeTab === 'dashboard' && (
+        <div className="bg-white rounded-xl border border-slate-200/80 p-8 text-center space-y-3 animate-in fade-in duration-150">
+          <div className="inline-flex p-3 bg-blue-50 text-brand-600 rounded-full">
+            <LayoutDashboard className="w-8 h-8" />
+          </div>
+          <h3 className="text-base font-bold text-slate-800">
+            Dashboard de Cobranzas e Índices de Actualización
+          </h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            Se alimentará de los totales calculados en la Cuenta Corriente.
+          </p>
         </div>
       )}
     </div>

@@ -1,5 +1,7 @@
 import api from './axios';
 import type { Obra, CreateObraDTO } from '../types';
+import type { CreateInmuebleConPersonasDTO } from '../types/inmuebles.types';
+
 
 export const getObras = async (): Promise<Obra[]> => {
   const { data } = await api.get<any>('/obras');
@@ -12,5 +14,14 @@ export const getObras = async (): Promise<Obra[]> => {
 
 export const createObra = async (payload: CreateObraDTO): Promise<Obra> => {
   const { data } = await api.post<Obra>('/obras', payload);
+  return data;
+};
+
+
+export const createInmuebleEnObra = async (
+  idObra: number,
+  payload: CreateInmuebleConPersonasDTO
+) => {
+  const { data } = await api.post(`/obras/${idObra}/inmuebles`, payload);
   return data;
 };

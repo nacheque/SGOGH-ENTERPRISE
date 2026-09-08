@@ -10,27 +10,23 @@ import cuotasRoutes from './cuotas.routes';
 
 const router = Router();
 
-// Health Check (Actividad 3.2.1)
+// Health Check
 router.get('/health', getHealth);
 
-// Módulo Obras (Catálogo Maestro y Padrón Territorial)
+// Módulo Obras (incluye GET /, POST /, GET /:id/padron y POST /:id/inmuebles)
 router.use('/obras', obrasRoutes);
 
-// Módulo Personas (Actividad 3.2.3)
+// Módulo Personas
 router.get('/personas', getPersonas);
 router.post('/personas', createPersona);
 
-// Módulo Inmuebles (Actividad 3.2.4)
+// Módulo Inmuebles (CRUD individual)
 router.get('/inmuebles', getInmuebles);
 router.post('/inmuebles', createInmueble);
 
-// Índices de Actualización de Cuotas
+// Índices, Contratos, Pagos y Cuotas
 router.use('/indices', indicesRoutes);
-
-// Contratos de obras
 router.use('/contratos', contratosRoutes);
-
-// Pagos y Cuotas
 router.use('/pagos', pagosRoutes);
 router.use('/cuotas', cuotasRoutes);
 
