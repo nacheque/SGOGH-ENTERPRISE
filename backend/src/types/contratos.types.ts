@@ -3,12 +3,13 @@ export interface CreateContratoDTO {
   plan_cuotas_obra: number;
   plan_cuotas_gabinete?: number | null;
   tipo_indexacion?: string;
+  monto_anticipo?: number | null;
   fecha_primer_vencimiento: string; // Formato 'YYYY-MM-DD'
 }
 
 export interface CuotaInsertDTO {
   id_contrato: number;
-  concepto: 'RED_OBRA' | 'GABINETE';
+  concepto: 'RED_OBRA' | 'GABINETE' | 'ANTICIPO';
   nro_cuota: number;
   periodo: string; // 'YYYY-MM'
   monto_base: number;

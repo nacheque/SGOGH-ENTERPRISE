@@ -10,6 +10,7 @@ export const createContrato = async (req: Request, res: Response, next: NextFunc
       plan_cuotas_obra,
       plan_cuotas_gabinete,
       tipo_indexacion,
+      monto_anticipo,
       fecha_primer_vencimiento,
     } = req.body;
 
@@ -17,7 +18,8 @@ export const createContrato = async (req: Request, res: Response, next: NextFunc
       id_inmueble: Number(id_inmueble),
       plan_cuotas_obra: Number(plan_cuotas_obra),
       plan_cuotas_gabinete: plan_cuotas_gabinete ? Number(plan_cuotas_gabinete) : null,
-      tipo_indexacion,
+      tipo_indexacion: tipo_indexacion || 'ICC',
+      monto_anticipo: monto_anticipo ? Number(monto_anticipo) : 0,
       fecha_primer_vencimiento,
     });
 
@@ -27,7 +29,13 @@ export const createContrato = async (req: Request, res: Response, next: NextFunc
       data: contrato,
     });
   } catch (error: any) {
-    if (error.message && (error.message.includes('Faltan') || error.message.includes('No se encontró') || error.message.includes('mayor a 0'))) {
+    if (
+      error.message &&
+      (error.message.includes('Faltan') ||
+        error.message.includes('No se encontró') ||
+        error.message.includes('mayor a 0') ||
+        error.message.includes('anticipo'))
+    ) {
       return res.status(400).json({ status: 'error', message: error.message });
     }
     next(error);

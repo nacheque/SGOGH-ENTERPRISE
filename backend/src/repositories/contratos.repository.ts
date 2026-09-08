@@ -142,4 +142,15 @@ export class ContratosRepository {
     const result = await pool.query(query, [id_contrato]);
     return result.rows[0] || null;
   }
+
+  async getContratoByInmuebleId(id_inmueble: number): Promise<any | null> {
+  const query = `
+    SELECT id_contrato 
+    FROM contratos 
+    WHERE id_inmueble = $1 
+    LIMIT 1;
+  `;
+  const result = await pool.query(query, [id_inmueble]);
+  return result.rows[0] || null;
+}
 }
