@@ -1,7 +1,3 @@
-// ==========================================
-// 1. Tipos Base / CRUD Simple (Existentes)
-// ==========================================
-
 export interface CreateInmuebleDTO {
   clave_cliente: string;
   id_obra: number;
@@ -23,8 +19,8 @@ export interface InmuebleResponseDTO {
   clave_cliente: string;
   id_obra: number;
   nombre_obra: string;
-  precio_x_metro: string | number;
-  costo_gabinete: string | number;
+  precio_x_metro: number | string;
+  costo_gabinete: number | string;
   id_frentista: number | null;
   frentista_nombre: string | null;
   frentista_dni: string | null;
@@ -36,15 +32,19 @@ export interface InmuebleResponseDTO {
   manzana: string | null;
   lote_catast_muni: string | null;
   lote_catast_provincia: string | null;
-  metros_frente: string | number;
+  metros_frente: number | string;
   conexion_gabinete: boolean;
   gabinete_colocado: boolean;
   observacion: string | null;
-}
 
-// ==========================================
-// 2. Tipos para Alta Atómica Compuesta
-// ==========================================
+  // Datos del Contrato Real (vía LEFT JOIN)
+  id_contrato?: number | null;
+  plan_cuotas_obra?: number | null;
+  plan_cuotas_gabinete?: number | null;
+  tipo_indexacion?: 'ICC' | 'FIJO' | string | null;
+  cuota_base_obra?: number | string | null;
+  monto_anticipo?: number | string | null;
+}
 
 export interface PersonaInputDTO {
   nombre_completo: string;

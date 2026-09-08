@@ -6,10 +6,10 @@ import {
   CreateInmuebleConPersonasDTO,
   PersonaInputDTO,
   InmuebleCompletoResponseDTO,
-} from '../types/inmueble.types'; // o '../types/inmuebles.types' según tu proyecto
+} from '../types/inmueble.types';
 
 export class InmueblesRepository {
-  // Consultar inmuebles uniendo los datos de obra, titular y frentista
+  // Consultar inmuebles uniendo obra, personas y la información del contrato emitido
   async getAll(): Promise<InmuebleResponseDTO[]> {
     const query = `
       SELECT 
@@ -33,11 +33,31 @@ export class InmueblesRepository {
         i.metros_frente,
         i.conexion_gabinete,
         COALESCE(i.gabinete_colocado, FALSE) AS gabinete_colocado,
-        i.observacion
+        i.observacion,
+
+        -- Información de Contrato y Cuota Semilla
+        c.id_contrato,
+        c.plan_cuotas_obra,
+        c.plan_cuotas_gabinete,
+        c.tipo_indexacion,
+        (
+          SELECT cu.monto_base 
+          FROM cuotas cu 
+          WHERE cu.id_contrato = c.id_contrato AND cu.concepto = 'RED_OBRA' 
+          ORDER BY cu.nro_cuota ASC 
+          LIMIT 1
+        ) AS cuota_base_obra,
+        (
+          SELECT cu.monto_base 
+          FROM cuotas cu 
+          WHERE cu.id_contrato = c.id_contrato AND cu.nro_cuota = 0 AND cu.concepto = 'ANTICIPO' 
+          LIMIT 1
+        ) AS monto_anticipo
       FROM inmuebles i
       INNER JOIN obras o ON i.id_obra = o.id_obra
       LEFT JOIN personas pf ON i.id_frentista = pf.id_persona
       LEFT JOIN personas pt ON i.id_titular = pt.id_persona
+      LEFT JOIN contratos c ON c.id_inmueble = i.id_inmueble
       ORDER BY i.id_inmueble DESC;
     `;
     const result = await pool.query(query);
@@ -139,10 +159,8 @@ export class InmueblesRepository {
     try {
       await client.query('BEGIN');
 
-      // 1. Resolver FRENTISTA (Obligatorio)
       const idFrentista = await this.resolverPersonaTx(client, data.frentista);
 
-      // 2. Resolver TITULAR (Opcional)
       let idTitular: number | null = null;
       if (data.titular?.es_mismo_frentista) {
         idTitular = idFrentista;
@@ -150,14 +168,12 @@ export class InmueblesRepository {
         idTitular = await this.resolverPersonaTx(client, data.titular.datos);
       }
 
-      // 3. Autogenerar clave_cliente si no viene provista
       const claveClienteFinal =
         data.clave_cliente?.trim() ||
         `OB${idObra}-MZ${data.manzana ? data.manzana.replace(/\s+/g, '') : '0'}-L${
           data.lote_catast_muni ? data.lote_catast_muni.replace(/\s+/g, '') : Date.now().toString().slice(-4)
         }`;
 
-      // 4. Insertar INMUEBLE
       const insertInmuebleQuery = `
         INSERT INTO inmuebles (
           id_obra,

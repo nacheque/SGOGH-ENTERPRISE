@@ -60,28 +60,27 @@ export interface CreatePersonaDTO {
 // ==========================================
 export interface Inmueble {
   id_inmueble: number;
-  clave_cliente: string;
   id_obra: number;
-  id_titular?: number | null;
-  id_frentista?: number | null;
-  manzana?: string | null;
-  lote_catast_muni?: string | null;
-  lote_catast_provincia?: string | null;
+  clave_cliente?: string;
   calle: string;
-  numero?: string | null;
-  metros_frente: number | string;
-  conexion_gabinete: boolean;
-  gabinete_colocado: boolean;
-  observacion?: string | null;
-
-  // Propiedades enriquecidas que retorna el Backend (JOINs)
-  nombre_obra?: string;
-  precio_x_metro?: number | string;
-  costo_gabinete?: number | string;
-  titular_nombre?: string | null;
-  titular_dni?: string | null;
-  frentista_nombre?: string | null;
-  frentista_dni?: string | null;
+  numero?: string;
+  manzana?: string;
+  lote_catast_muni?: string;
+  lote_catast_provincia?: string;
+  metros_frente: number;
+  conexion_gabinete?: boolean;
+  gabinete_colocado?: boolean;
+  observacion?: string;
+  frentista_nombre?: string;
+  titular_nombre?: string;
+  titular_dni?: string;
+  // Campos del contrato
+  id_contrato?: number | null;
+  plan_cuotas_obra?: number | null;
+  plan_cuotas_gabinete?: number | null;
+  tipo_indexacion?: 'ICC' | 'FIJO' | null;
+  cuota_base_obra?: number | null;
+  monto_anticipo?: number | null;
 }
 
 export interface CreateInmuebleDTO {
@@ -106,7 +105,9 @@ export interface CreateInmuebleDTO {
 // ==========================================
 export interface CuentaCorrienteRow {
   id_inmueble: number;
-  clave: string;
+  id_contrato: number | null;
+  tiene_contrato: boolean;
+  clave?: string;
   frentista_nombre: string | null;
   titular_nombre: string | null;
   metros_frente: number;
@@ -126,9 +127,11 @@ export interface CuentaCorrienteRow {
   costo_obra: number;
   serv_dom: number;
   costo_total: number;
-  plan_pagos: number;
+  plan_pagos: number | null;
   cuota_base: number;
-  estado: string;
+  monto_anticipo: number;
+  tipo_indexacion: 'ICC' | 'FIJO' | null;
+  estado: 'ACTIVO' | 'SIN_PLAN';
   cuota_vigente_actual: number;
 }
 

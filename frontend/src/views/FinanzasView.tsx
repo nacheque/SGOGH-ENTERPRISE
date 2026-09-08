@@ -41,6 +41,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
     fetchData();
   }, []);
 
+  // Filtrar y calcular la cuenta corriente en base a los inmuebles y contrato real
   const cuentaCorrienteData: CuentaCorrienteRow[] = inmuebles
     .filter((inm) => selectedObraId === null || inm.id_obra === selectedObraId)
     .map((inm) => {
@@ -50,11 +51,17 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
       const costoObra = metrosFrente * precioMetro;
       const servDom = inm.conexion_gabinete ? Number(obraAsociada?.costo_gabinete || 300000) : 0;
       const costoTotal = costoObra + servDom;
-      const planPagos = 24;
-      const cuotaBase = planPagos > 0 ? costoTotal / planPagos : 0;
+
+      // Lectura del Contrato Real
+      const tieneContrato = Boolean(inm.id_contrato);
+      const planPagos = inm.plan_cuotas_obra ?? null;
+      const cuotaBase = inm.cuota_base_obra ? Number(inm.cuota_base_obra) : 0;
+      const anticipo = inm.monto_anticipo ? Number(inm.monto_anticipo) : 0;
 
       return {
         id_inmueble: inm.id_inmueble,
+        id_contrato: inm.id_contrato || null,
+        tiene_contrato: tieneContrato,
         clave: inm.clave_cliente,
         frentista_nombre: inm.frentista_nombre || null,
         titular_nombre: inm.titular_nombre || null,
@@ -67,7 +74,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
         observacion: inm.observacion || null,
         conexion_gabinete: Boolean(inm.conexion_gabinete),
         gabinete_colocado: Boolean(inm.gabinete_colocado),
-        dni: null,
+        dni: inm.titular_dni || null,
         cuil: null,
         telefono: null,
         email: null,
@@ -77,7 +84,9 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
         costo_total: costoTotal,
         plan_pagos: planPagos,
         cuota_base: cuotaBase,
-        estado: 'ACTIVO',
+        monto_anticipo: anticipo,
+        tipo_indexacion: inm.tipo_indexacion || null,
+        estado: tieneContrato ? 'ACTIVO' : 'SIN_PLAN',
         cuota_vigente_actual: cuotaBase,
       };
     });
