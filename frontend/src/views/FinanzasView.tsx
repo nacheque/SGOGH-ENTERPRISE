@@ -7,6 +7,7 @@ import { CuentaCorrienteTable } from '../components/finanzas/CuentaCorrienteTabl
 import { LayoutDashboard } from 'lucide-react';
 import { PlanCuotasModal } from '../components/finanzas/PlanCuotasModal';
 import { ObrasView } from './ObrasView';
+import { DashboardKPIs } from '../components/finanzas/DashboardKPIs';
 
 interface Props {
   showToast: (msg: string, type: 'success' | 'error') => void;
@@ -167,16 +168,8 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
 
       {/* PESTAÑA 3: DASHBOARD */}
       {activeTab === 'dashboard' && (
-        <div className="bg-white rounded-xl border border-slate-200/80 p-8 text-center space-y-3 animate-in fade-in duration-150">
-          <div className="inline-flex p-3 bg-blue-50 text-brand-600 rounded-full">
-            <LayoutDashboard className="w-8 h-8" />
-          </div>
-          <h3 className="text-base font-bold text-slate-800">
-            Dashboard de Cobranzas e Índices de Actualización
-          </h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto">
-            Se alimentará de los totales calculados en la Cuenta Corriente.
-          </p>
+        <div className="animate-in fade-in duration-200">
+          <DashboardKPIs />
         </div>
       )}
     </div>
