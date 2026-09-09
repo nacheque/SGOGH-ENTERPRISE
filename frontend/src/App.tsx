@@ -82,7 +82,7 @@ export default function App() {
           <h2 className="text-base font-bold text-slate-800">
             Módulo Integral • SG Administración, Finanzas y Obras
           </h2>
-          <span className="text-xs text-slate-400 font-medium font-mono">Build 2.1</span>
+          <span className="text-xs text-slate-400 font-medium font-mono">Sprint 3</span>
         </header>
 
         <div className="p-8 flex-1 overflow-y-auto">

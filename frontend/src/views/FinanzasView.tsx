@@ -4,10 +4,12 @@ import { getObras } from '../api/obras.api';
 import { getInmuebles } from '../api/inmuebles.api';
 import { ResumenObraHeader } from '../components/finanzas/ResumenObraHeader';
 import { CuentaCorrienteTable } from '../components/finanzas/CuentaCorrienteTable';
-import { LayoutDashboard } from 'lucide-react';
+//import { LayoutDashboard } from 'lucide-react';
 import { PlanCuotasModal } from '../components/finanzas/PlanCuotasModal';
 import { ObrasView } from './ObrasView';
 import { DashboardKPIs } from '../components/finanzas/DashboardKPIs';
+import { FileSpreadsheet } from 'lucide-react';
+import { ImportarRoelaModal } from '../components/finanzas/ImportarRoelaModal';
 
 interface Props {
   showToast: (msg: string, type: 'success' | 'error') => void;
@@ -22,6 +24,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
   const [inmuebles, setInmuebles] = useState<Inmueble[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedCuentaModal, setSelectedCuentaModal] = useState<CuentaCorrienteRow | null>(null);
+  const [modalRoelaOpen, setModalRoelaOpen] = useState(false);
 
   // Declarar fetchData afuera para poder reutilizarla
   const fetchData = async () => {
@@ -151,6 +154,19 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
             onSelectObra={setSelectedObraId}
             totalVecinos={cuentaCorrienteData.length}
           />
+          
+          {/* BARRA DE ACCIONES DE CUENTA CORRIENTE */}
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => setModalRoelaOpen(true)}
+              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              Importar Rendición SIRO
+            </button>
+          </div>
+          
           <CuentaCorrienteTable
             data={cuentaCorrienteData}
             loading={loading}
@@ -162,6 +178,13 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
             onClose={() => setSelectedCuentaModal(null)}
             showToast={showToast}
             onPlanCreado={fetchData} // <-- Vuelve a cargar getInmuebles() y refresca la tabla
+          />
+
+          {/* MODAL IMPORTAR ROELA */}
+          <ImportarRoelaModal
+            isOpen={modalRoelaOpen}
+            onClose={() => setModalRoelaOpen(false)}
+            showToast={showToast}
           />
         </div>
       )}
