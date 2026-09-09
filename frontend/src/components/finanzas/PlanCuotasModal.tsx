@@ -108,26 +108,46 @@ export const PlanCuotasModal: React.FC<Props> = ({
   const servDom = cuenta.conexion_gabinete ? Number(cuenta.serv_dom) || 0 : 0;
   const metrosFrenteNum = Number(cuenta.metros_frente) || 0;
   const saldoFinanciarObra = Math.max(0, costoObra - (Number(anticipo) || 0));
-  const cuotaBaseObraSimulada = planCuotasObra > 0 ? saldoFinanciarObra / planCuotasObra : 0;
-  const cuotaBaseGabineteSimulada =
-    servDom > 0 && planCuotasGabinete > 0 ? servDom / planCuotasGabinete : 0;
 
-  // Manejador del cambio dinámico del índice en cuotas pendientes
-  const handleIndiceChange = (id_cuota: number, nuevoIndice: number) => {
-    setCuotas((prevCuotas) =>
-      prevCuotas.map((c) => {
-        if (c.id_cuota === id_cuota) {
-          const base = Number(c.monto_base || 0);
-          const actualizado = Number((base * nuevoIndice).toFixed(2));
-          return {
-            ...c,
-            coeficiente_actualizacion: nuevoIndice,
-            monto_actualizado: actualizado,
-          };
+  const cantCuotasObra = Number(planCuotasObra) > 0 ? Number(planCuotasObra) : 1;
+  const cuotaBaseObraSimulada = saldoFinanciarObra / cantCuotasObra;
+
+  const cantCuotasGab = Number(planCuotasGabinete) > 0 ? Number(planCuotasGabinete) : 1;
+  const cuotaBaseGabineteSimulada = servDom > 0 ? servDom / cantCuotasGab : 0;
+  // Detección de contrato con modalidad fija
+  const esPlanFijo = String(cuenta.tipo_indexacion || '').toUpperCase() === 'FIJO';
+
+  // Manejador del cambio porcentual mensual respecto a la cuota anterior
+  const handlePorcentajeChange = (indexActual: number, porcentajeMensual: number) => {
+    // Si el plan es FIJO, se bloquea cualquier recálculo
+    if (esPlanFijo) return;
+
+    setCuotas((prevCuotas) => {
+      const actualizadas = [...prevCuotas];
+      const cuotaActual = actualizadas[indexActual];
+
+      let montoAnterior = Number(cuotaActual.monto_base || 0);
+      for (let i = indexActual - 1; i >= 0; i--) {
+        if (actualizadas[i].concepto === cuotaActual.concepto) {
+          montoAnterior = Number(actualizadas[i].monto_actualizado || actualizadas[i].monto_base || 0);
+          break;
         }
-        return c;
-      })
-    );
+      }
+
+      const nuevoMonto = Number((montoAnterior * (1 + porcentajeMensual / 100)).toFixed(2));
+      const coefAcumulado = Number(cuotaActual.monto_base) > 0 
+        ? Number((nuevoMonto / Number(cuotaActual.monto_base)).toFixed(4)) 
+        : 1.0;
+
+      actualizadas[indexActual] = {
+        ...cuotaActual,
+        porcentaje_mensual: porcentajeMensual,
+        coeficiente_actualizacion: coefAcumulado,
+        monto_actualizado: nuevoMonto,
+      };
+
+      return actualizadas;
+    });
   };
 
   // Manejo del Envío a la API para emitir contrato nuevo
@@ -202,8 +222,8 @@ export const PlanCuotasModal: React.FC<Props> = ({
             </button>
           </div>
 
-          {/* Resumen Superior del Lote */}
-          <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
+          {/* Resumen Superior del Lote: 5 Tarjetas */}
+          <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 text-xs font-mono">
             <div>
               <span className="text-slate-400 block text-[10px] uppercase font-bold">Costo Obra</span>
               <span className="font-bold text-slate-800">${costoObra.toLocaleString('es-AR')}</span>
@@ -223,6 +243,12 @@ export const PlanCuotasModal: React.FC<Props> = ({
             <div>
               <span className="text-slate-400 block text-[10px] uppercase font-bold">Frente / Metros</span>
               <span className="font-bold text-slate-800">{metrosFrenteNum.toFixed(2)} m</span>
+            </div>
+            <div>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold">Cuota Base</span>
+              <span className="font-bold text-emerald-600">
+                ${(Number(cuenta.cuota_base) || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+              </span>
             </div>
           </div>
 
@@ -312,39 +338,45 @@ export const PlanCuotasModal: React.FC<Props> = ({
                       </div>
                     </div>
 
+                    {/* Cantidad de Cuotas Obra (Numérico Libre) */}
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Plan Cuotas Obra
+                        Cantidad de Cuotas Obra
                       </label>
-                      <select
-                        value={planCuotasObra}
-                        onChange={(e) => setPlanCuotasObra(Number(e.target.value))}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:border-brand-500 focus:bg-white outline-none transition"
-                      >
-                        <option value={1}>1 Cuota (Contado)</option>
-                        <option value={3}>3 Cuotas</option>
-                        <option value={6}>6 Cuotas</option>
-                        <option value={12}>12 Cuotas</option>
-                        <option value={18}>18 Cuotas</option>
-                        <option value={24}>24 Cuotas</option>
-                        <option value={36}>36 Cuotas</option>
-                      </select>
+                      <input
+                        type="number"
+                        min={1}
+                        max={120}
+                        step={1}
+                        value={planCuotasObra || ''}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          setPlanCuotasObra(isNaN(val) ? 0 : Math.max(1, val));
+                        }}
+                        placeholder="Ej: 2, 6, 12, 24"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-medium focus:border-brand-500 focus:bg-white outline-none transition"
+                      />
                     </div>
 
+                    {/* Cantidad de Cuotas Gabinete (Numérico Libre, si aplica) */}
                     {cuenta.conexion_gabinete && (
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Plan Cuotas Gabinete
+                          Cantidad de Cuotas Gabinete
                         </label>
-                        <select
-                          value={planCuotasGabinete}
-                          onChange={(e) => setPlanCuotasGabinete(Number(e.target.value))}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:border-brand-500 focus:bg-white outline-none transition"
-                        >
-                          <option value={1}>1 Cuota (Contado)</option>
-                          <option value={3}>3 Cuotas</option>
-                          <option value={6}>6 Cuotas</option>
-                        </select>
+                        <input
+                          type="number"
+                          min={1}
+                          max={60}
+                          step={1}
+                          value={planCuotasGabinete || ''}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            setPlanCuotasGabinete(isNaN(val) ? 0 : Math.max(1, val));
+                          }}
+                          placeholder="Ej: 1, 2, 3, 6"
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-medium focus:border-brand-500 focus:bg-white outline-none transition"
+                        />
                       </div>
                     )}
 
@@ -386,7 +418,7 @@ export const PlanCuotasModal: React.FC<Props> = ({
                           ${cuotaBaseObraSimulada.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                         </span>
                         <span className="text-[10px] text-slate-400 block font-sans">
-                          x {planCuotasObra} mes(es)
+                          x {cantCuotasObra} mes(es)
                         </span>
                       </div>
 
@@ -399,7 +431,7 @@ export const PlanCuotasModal: React.FC<Props> = ({
                             ${cuotaBaseGabineteSimulada.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                           </span>
                           <span className="text-[10px] text-slate-400 block font-sans">
-                            x {planCuotasGabinete} mes(es)
+                            x {cantCuotasGab} mes(es)
                           </span>
                         </div>
                       )}
@@ -443,22 +475,36 @@ export const PlanCuotasModal: React.FC<Props> = ({
                       <th className="px-3 py-2.5">Concepto</th>
                       <th className="px-3 py-2.5">Período</th>
                       <th className="px-3 py-2.5">Vencimiento</th>
-                      <th className="px-3 py-2.5 text-right">Monto Base</th>
-                      <th className="px-3 py-2.5 text-center w-28">Índice / Coef.</th>
+                      <th className="px-3 py-2.5 text-center w-28">Índice</th>
                       <th className="px-3 py-2.5 text-right">Actualizado</th>
                       <th className="px-3 py-2.5 text-center">Estado</th>
                       <th className="px-3 py-2.5 text-center">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-mono">
-                    {cuotas.map((c) => {
+                    {cuotas.map((c, index) => {
                       const estadoNormalizado = String(c.estado || '').toUpperCase().trim();
                       const isPagado =
                         estadoNormalizado === 'PAGADA' ||
                         estadoNormalizado === 'PAGADO' ||
                         estadoNormalizado === 'COBRADA';
 
-                      const indiceValor = Number(c.coeficiente_actualizacion || 1.0);
+                      // Buscar el valor de la cuota anterior del mismo concepto
+                      let montoAnterior = Number(c.monto_base || 0);
+                      for (let i = index - 1; i >= 0; i--) {
+                        if (cuotas[i].concepto === c.concepto) {
+                          montoAnterior = Number(cuotas[i].monto_actualizado || cuotas[i].monto_base || 0);
+                          break;
+                        }
+                      }
+
+                      // Variación porcentual mensual respecto a la cuota inmediatamente anterior
+                      const montoActual = Number(c.monto_actualizado || c.monto_base || 0);
+                      const porcentajeMensual = c.porcentaje_mensual !== undefined
+                        ? Number(c.porcentaje_mensual)
+                        : montoAnterior > 0
+                        ? Number((((montoActual - montoAnterior) / montoAnterior) * 100).toFixed(2))
+                        : 0;
 
                       return (
                         <tr key={c.id_cuota} className="hover:bg-slate-50/70 transition">
@@ -477,39 +523,47 @@ export const PlanCuotasModal: React.FC<Props> = ({
                               : '-'}
                           </td>
 
-                          {/* Monto Base */}
-                          <td className="px-3 py-2.5 text-right text-slate-600">
-                            ${Number(c.monto_base || 0).toLocaleString('es-AR', {
-                              minimumFractionDigits: 2,
-                            })}
-                          </td>
-
-                          {/* Columna Índice: Input editable si está pendiente, etiqueta fija si está pagada */}
+                          {/* Columna AJUSTE ICC (%) / VARIACIÓN (%) */}
                           <td className="px-3 py-2.5 text-center">
-                            {isPagado ? (
+                            {esPlanFijo ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium text-slate-400 bg-slate-100/80 border border-slate-200">
+                                0.00 % (Fijo)
+                              </span>
+                            ) : isPagado ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200">
-                                {indiceValor.toFixed(4)}
+                                {porcentajeMensual >= 0 ? `+${porcentajeMensual.toFixed(2)} %` : `${porcentajeMensual.toFixed(2)} %`}
                               </span>
                             ) : (
                               <div className="inline-flex items-center justify-center">
-                                <input
-                                  type="number"
-                                  step="0.0001"
-                                  min="0"
-                                  value={indiceValor}
-                                  onChange={(e) =>
-                                    handleIndiceChange(c.id_cuota, parseFloat(e.target.value) || 0)
-                                  }
-                                  className="w-20 px-1.5 py-1 text-center font-mono font-bold text-slate-800 bg-white border border-slate-300 rounded-lg focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none text-xs shadow-xs"
-                                  title="Ajustar coeficiente multiplicador"
-                                />
+                                <div className="relative inline-flex items-center">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={porcentajeMensual}
+                                    onChange={(e) =>
+                                      handlePorcentajeChange(
+                                        index,
+                                        parseFloat(e.target.value) || 0
+                                      )
+                                    }
+                                    className="w-20 pr-5 pl-1.5 py-1 text-right font-mono font-bold text-slate-800 bg-white border border-slate-300 rounded-lg focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none text-xs shadow-xs"
+                                    title="Porcentaje de ajuste mensual respecto a la cuota anterior"
+                                  />
+                                  <span className="absolute right-1.5 text-[11px] font-bold text-slate-400 pointer-events-none">
+                                    %
+                                  </span>
+                                </div>
                               </div>
                             )}
                           </td>
 
-                          {/* Monto Actualizado reactivo */}
+                          {/* Monto Actualizado (si es plan fijo muestra siempre el monto_base) */}
                           <td className="px-3 py-2.5 text-right font-bold text-slate-900">
-                            ${Number(c.monto_actualizado || c.monto_base || 0).toLocaleString('es-AR', {
+                            ${Number(
+                              esPlanFijo
+                                ? c.monto_base || 0
+                                : c.monto_actualizado || c.monto_base || 0
+                            ).toLocaleString('es-AR', {
                               minimumFractionDigits: 2,
                             })}
                           </td>
