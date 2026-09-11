@@ -66,6 +66,9 @@ export const PlanCuotasModal: React.FC<Props> = ({
         ? res.data
         : [];
 
+      console.log('Cuotas recibidas:', rawList);
+
+
       // Inicializar cada cuota asegurando coeficiente numérico
       const formatted = rawList.map((c: any) => {
         const base = Number(c.monto_base || 0);
@@ -87,6 +90,7 @@ export const PlanCuotasModal: React.FC<Props> = ({
     } finally {
       setLoadingCuotas(false);
     }
+
   };
 
   useEffect(() => {
@@ -191,6 +195,24 @@ export const PlanCuotasModal: React.FC<Props> = ({
     } finally {
       setSubmittingPlan(false);
     }
+  };
+
+  // Función para obtener el saldo exigible neto de una cuota
+  const getSaldoExigible = (c: any): number => {
+    if (c.saldo_pendiente !== undefined && c.saldo_pendiente !== null) {
+      return Number(c.saldo_pendiente);
+    }
+    const montoTotal = Number(
+      esPlanFijo ? c.monto_base || 0 : c.monto_actualizado || c.monto_base || 0
+    );
+    // Sumar pagos previos si vienen en el array c.pagos o campo c.monto_pagado
+    const pagado = Number(
+      c.monto_pagado ||
+      (Array.isArray(c.pagos)
+        ? c.pagos.reduce((acc: number, p: any) => acc + Number(p.monto || 0), 0)
+        : 0)
+    );
+    return Math.max(0, montoTotal - pagado);
   };
 
   return (
@@ -488,6 +510,7 @@ export const PlanCuotasModal: React.FC<Props> = ({
                         estadoNormalizado === 'PAGADA' ||
                         estadoNormalizado === 'PAGADO' ||
                         estadoNormalizado === 'COBRADA';
+                      const isPagoParcial = estadoNormalizado === 'PAGO_PARCIAL';
 
                       // Buscar el valor de la cuota anterior del mismo concepto
                       let montoAnterior = Number(c.monto_base || 0);
@@ -505,6 +528,8 @@ export const PlanCuotasModal: React.FC<Props> = ({
                         : montoAnterior > 0
                         ? Number((((montoActual - montoAnterior) / montoAnterior) * 100).toFixed(2))
                         : 0;
+
+                      const saldoRestante = getSaldoExigible(c);
 
                       return (
                         <tr key={c.id_cuota} className="hover:bg-slate-50/70 transition">
@@ -557,15 +582,18 @@ export const PlanCuotasModal: React.FC<Props> = ({
                             )}
                           </td>
 
-                          {/* Monto Actualizado (si es plan fijo muestra siempre el monto_base) */}
+                          {/* Monto Actualizado / Saldo Remanente */}
                           <td className="px-3 py-2.5 text-right font-bold text-slate-900">
-                            ${Number(
-                              esPlanFijo
-                                ? c.monto_base || 0
-                                : c.monto_actualizado || c.monto_base || 0
-                            ).toLocaleString('es-AR', {
-                              minimumFractionDigits: 2,
-                            })}
+                            <div>
+                              ${Number(c.monto_actualizado || c.monto_base || 0).toLocaleString('es-AR', {
+                                minimumFractionDigits: 2,
+                              })}
+                              {isPagoParcial && (
+                                <span className="block text-[10px] text-amber-600 font-sans font-normal">
+                                  (Saldo remanente)
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           {/* Estado */}
@@ -574,10 +602,12 @@ export const PlanCuotasModal: React.FC<Props> = ({
                               className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                 isPagado
                                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  : isPagoParcial
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                  : 'bg-slate-100 text-slate-700 border border-slate-200'
                               }`}
                             >
-                              {c.estado}
+                              {isPagoParcial ? 'PAGO PARCIAL' : c.estado}
                             </span>
                           </td>
 

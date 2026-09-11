@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { CuotaConPagoDTO, CreatePagoDTO, MedioPago } from '../../types';
 import { registrarPago } from '../../api/pagos.api';
-import { X, DollarSign, Loader2, CreditCard } from 'lucide-react';
+import { X, DollarSign, Loader2, CreditCard, AlertCircle } from 'lucide-react';
 
 interface Props {
   cuota: CuotaConPagoDTO | null;
@@ -21,21 +21,35 @@ export const CobrarCuotaModal: React.FC<Props> = ({
   if (!isOpen || !cuota) return null;
 
   const todayStr = new Date().toISOString().split('T')[0];
-  const montoSugerido = Number(cuota.monto_actualizado || cuota.monto_base || 0);
+
+  // El saldo pendiente real que envía el backend es monto_actualizado
+  const saldoPendiente = Number(cuota.monto_actualizado || cuota.monto_base || 0);
 
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<CreatePagoDTO>({
     id_cuota: cuota.id_cuota,
-    monto: montoSugerido,
+    monto: saldoPendiente,
     fecha_pago: todayStr,
     medio_pago: 'TRANSFERENCIA',
     comprobante: '',
   });
 
+  const montoIngresado = Number(formData.monto) || 0;
+  const remanente = Math.max(0, saldoPendiente - montoIngresado);
+  const esParcial = montoIngresado > 0 && montoIngresado < saldoPendiente - 0.01;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.monto <= 0) {
       showToast('El monto a pagar debe ser mayor a 0', 'error');
+      return;
+    }
+
+    if (montoIngresado > saldoPendiente) {
+      showToast(
+        `El monto no puede superar el saldo adeudado ($ ${saldoPendiente.toLocaleString('es-AR', { minimumFractionDigits: 2 })})`,
+        'error'
+      );
       return;
     }
 
@@ -76,17 +90,43 @@ export const CobrarCuotaModal: React.FC<Props> = ({
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
           <div>
-            <label className="block font-semibold text-slate-700 mb-1">Monto a Imputar ($) *</label>
             <div className="relative">
-              <DollarSign className="w-4 h-4 absolute left-2.5 top-2 text-slate-400" />
-              <input
-                type="number"
-                step="0.01"
-                required
-                value={formData.monto}
-                onChange={(e) => setFormData({ ...formData, monto: parseFloat(e.target.value) || 0 })}
-                className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg font-mono font-bold text-slate-800 outline-none focus:border-brand-500"
-              />
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block font-semibold text-slate-700">Monto a Imputar ($) *</label>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, monto: saldoPendiente })}
+                    className="text-[10px] text-brand-600 hover:underline font-bold"
+                  >
+                    Pagar Total
+                  </button>
+                </div>
+                <div className="relative">
+                  <DollarSign className="w-4 h-4 absolute left-2.5 top-2 text-slate-400" />
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    max={saldoPendiente}
+                    required
+                    value={formData.monto}
+                    onChange={(e) => setFormData({ ...formData, monto: parseFloat(e.target.value) || 0 })}
+                    className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg font-mono font-bold text-slate-800 outline-none focus:border-brand-500"
+                  />
+            </div>
+
+            {/* AVISO DE PAGO PARCIAL AQUÍ */}
+            {esParcial && (
+              <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 text-amber-800">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span className="text-[11px] font-medium">
+                  Pago Parcial: Quedará un remanente pendiente de{' '}
+                  <strong>${remanente.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</strong>.
+                </span>
+              </div>
+            )}
+          </div>
             </div>
           </div>
 
@@ -127,6 +167,7 @@ export const CobrarCuotaModal: React.FC<Props> = ({
             />
           </div>
 
+          {/* Footer del Formulario */}
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
             <button
               type="button"
@@ -137,11 +178,12 @@ export const CobrarCuotaModal: React.FC<Props> = ({
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || montoIngresado <= 0 || montoIngresado > saldoPendiente}
               className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg flex items-center gap-1.5 transition shadow-xs disabled:opacity-50"
             >
               {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Confirmar Cobro
+              {/* Aquí se verifica si es parcial */}
+              {esParcial ? 'Confirmar Pago Parcial' : 'Confirmar Cobro Total'}
             </button>
           </div>
         </form>

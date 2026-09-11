@@ -84,7 +84,7 @@ export interface Inmueble {
 }
 
 export interface CreateInmuebleDTO {
-  clave_cliente: string;
+  clave_cliente: string | null; // Opcional manual
   id_obra: number;
   id_frentista?: number | null;
   id_titular?: number | null;

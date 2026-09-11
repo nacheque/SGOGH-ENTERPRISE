@@ -8,6 +8,7 @@ export interface TitularInputDTO {
 }
 
 export interface CreateInmuebleConPersonasDTO {
+  clave_cliente?: string | null; // Opcional manual
   calle: string;
   numero?: string;
   manzana?: string;

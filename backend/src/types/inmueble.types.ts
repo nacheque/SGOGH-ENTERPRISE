@@ -3,7 +3,7 @@
 // ==========================================
 
 export interface CreateInmuebleDTO {
-  clave_cliente: string;
+  clave_cliente: string | null; //opcion manual
   id_obra: number;
   id_frentista?: number | null;
   id_titular?: number | null;
@@ -64,7 +64,7 @@ export interface PersonaInputDTO {
 }
 
 export interface CreateInmuebleConPersonasDTO {
-  clave_cliente?: string;
+  clave_cliente?: string | null; //opcion manual
   calle: string;
   numero?: string | null;
   manzana?: string | null;

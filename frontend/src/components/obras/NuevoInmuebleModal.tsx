@@ -31,6 +31,9 @@ export const NuevoInmuebleModal: React.FC<Props> = ({
   const [gabineteColocado, setGabineteColocado] = useState(false);
   const [observacion, setObservacion] = useState('');
 
+  //clave del cliente
+  const [claveCliente, setClaveCliente] = useState('');
+
   // Sección 2: Frentista
   const [frentistaNombre, setFrentistaNombre] = useState('');
 
@@ -46,6 +49,7 @@ export const NuevoInmuebleModal: React.FC<Props> = ({
   if (!isOpen) return null;
 
   const resetForm = () => {
+    setClaveCliente('');
     setCalle('');
     setNumero('');
     setManzana('');
@@ -87,6 +91,7 @@ export const NuevoInmuebleModal: React.FC<Props> = ({
     }
 
     const payload: CreateInmuebleConPersonasDTO = {
+      clave_cliente: claveCliente.trim() || null,
       calle: calle.trim(),
       numero: numero.trim() || undefined,
       manzana: manzana.trim() || undefined,
@@ -158,6 +163,21 @@ export const NuevoInmuebleModal: React.FC<Props> = ({
               <span>1. Datos Físicos y Catastrales del Inmueble</span>
             </div>
 
+            {/* caja de la clave de cliente que se compara contra
+            //la clave de cliente del reporte de siro roela */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Clave Cliente / Padrón
+              </label>
+              <input
+                type="text"
+                placeholder="Ej: 471 (Opcional)"
+                value={claveCliente}
+                onChange={(e) => setClaveCliente(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-medium focus:border-brand-500 focus:bg-white outline-none transition"
+              />
+            </div>
+            
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="md:col-span-2">
                 <label className="font-semibold text-slate-600 block mb-1">Calle *</label>

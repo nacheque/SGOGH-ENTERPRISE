@@ -1,3 +1,5 @@
+export type EstadoCuota = 'PENDIENTE' | 'PAGADA' | 'PAGO_PARCIAL' | 'VENCIDA';
+
 export interface CreateContratoDTO {
   id_inmueble: number;
   plan_cuotas_obra: number;
@@ -15,7 +17,7 @@ export interface CuotaInsertDTO {
   monto_base: number;
   monto_actualizado: number;
   fecha_vencimiento: string; // Formato 'YYYY-MM-DD'
-  estado: 'PENDIENTE' | 'PAGADA' | 'VENCIDA';
+  estado: EstadoCuota;
 }
 
 export interface ContratoResponseDTO {
