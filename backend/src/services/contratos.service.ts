@@ -60,6 +60,7 @@ export class ContratosService {
 
     // 6. Generación de Cuota 0 (ANTICIPO) si corresponde
     if (anticipo > 0) {
+      const montoAnticipo = Number(anticipo.toFixed(2));
       cuotasParaGenerar.push({
         id_contrato: 0, // Asignado en la transacción SQL del repositorio
         concepto: 'ANTICIPO',
@@ -67,8 +68,9 @@ export class ContratosService {
         periodo: `${fechaVencimientoInicial.getFullYear()}-${String(
           fechaVencimientoInicial.getMonth() + 1
         ).padStart(2, '0')}`,
-        monto_base: Number(anticipo.toFixed(2)),
-        monto_actualizado: Number(anticipo.toFixed(2)),
+        monto_base: montoAnticipo,
+        monto_actualizado: montoAnticipo,
+        saldo_remanente: montoAnticipo,
         fecha_vencimiento: dto.fecha_primer_vencimiento,
         estado: 'PENDIENTE',
       });
@@ -89,6 +91,7 @@ export class ContratosService {
         periodo: `${fechaVenc.getFullYear()}-${String(fechaVenc.getMonth() + 1).padStart(2, '0')}`,
         monto_base: montoBaseObra,
         monto_actualizado: montoBaseObra,
+        saldo_remanente: montoBaseObra,
         fecha_vencimiento: fechaVenc.toISOString().split('T')[0],
         estado: 'PENDIENTE',
       });
@@ -108,6 +111,7 @@ export class ContratosService {
           periodo: `${fechaVenc.getFullYear()}-${String(fechaVenc.getMonth() + 1).padStart(2, '0')}`,
           monto_base: montoBaseGabinete,
           monto_actualizado: montoBaseGabinete,
+          saldo_remanente: montoBaseGabinete,
           fecha_vencimiento: fechaVenc.toISOString().split('T')[0],
           estado: 'PENDIENTE',
         });

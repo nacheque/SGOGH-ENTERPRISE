@@ -66,9 +66,6 @@ export const PlanCuotasModal: React.FC<Props> = ({
         ? res.data
         : [];
 
-      console.log('Cuotas recibidas:', rawList);
-
-
       // Inicializar cada cuota asegurando coeficiente numérico
       const formatted = rawList.map((c: any) => {
         const base = Number(c.monto_base || 0);
@@ -90,7 +87,6 @@ export const PlanCuotasModal: React.FC<Props> = ({
     } finally {
       setLoadingCuotas(false);
     }
-
   };
 
   useEffect(() => {
@@ -118,36 +114,89 @@ export const PlanCuotasModal: React.FC<Props> = ({
 
   const cantCuotasGab = Number(planCuotasGabinete) > 0 ? Number(planCuotasGabinete) : 1;
   const cuotaBaseGabineteSimulada = servDom > 0 ? servDom / cantCuotasGab : 0;
+
   // Detección de contrato con modalidad fija
   const esPlanFijo = String(cuenta.tipo_indexacion || '').toUpperCase() === 'FIJO';
 
-  // Manejador del cambio porcentual mensual respecto a la cuota anterior
-  const handlePorcentajeChange = (indexActual: number, porcentajeMensual: number) => {
-    // Si el plan es FIJO, se bloquea cualquier recálculo
-    if (esPlanFijo) return;
+  /**
+   * Obtiene el valor nominal íntegro de la cuota.
+   * SOLO en estado PAGO_PARCIAL se suma total_abonado a monto_actualizado
+   * porque monto_actualizado contiene únicamente el saldo remanente.
+   * Si está PAGADA o PENDIENTE, monto_actualizado (o monto_base) ya representa el valor íntegro.
+   */
+  const getMontoNominalIntegro = (c: any): number => {
+    const estado = String(c.estado || '').toUpperCase().trim();
+    const esGabinete = String(c.concepto || '').toUpperCase().includes('GABINETE');
+    const esAnticipo = String(c.concepto || '').toUpperCase().includes('ANTICIPO');
 
+    // Para conceptos de valor fijo (Gabinete/Anticipo), el nominal es siempre monto_base
+    if (esGabinete || esAnticipo) {
+      return Number(c.monto_base || 0);
+    }
+
+    const act = Number(c.monto_actualizado || c.monto_base || 0);
+
+    if (estado === 'PAGO_PARCIAL') {
+      const abonado = Number(
+        c.total_abonado ??
+        c.monto_pagado ??
+        (Array.isArray(c.pagos)
+          ? c.pagos.reduce((acc: number, p: any) => acc + Number(p.monto || 0), 0)
+          : 0)
+      );
+      return act + abonado;
+    }
+
+    return act;
+  };
+
+  /**
+   * Busca la cuota previa DEL MISMO CONCEPTO estrictamente cronológica por período.
+   */
+  const getCuotaPreviaMismoConcepto = (lista: any[], cuotaActual: any) => {
+    return (
+      lista
+        .filter(
+          (c) =>
+            c.concepto === cuotaActual.concepto &&
+            String(c.periodo || '') < String(cuotaActual.periodo || '')
+        )
+        .sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)))
+        .pop() || null
+    );
+  };
+
+  // Manejador del cambio porcentual mensual respecto a la cuota anterior
+  const handlePorcentajeChange = (index: number, nuevoPorcentaje: number) => {
     setCuotas((prevCuotas) => {
       const actualizadas = [...prevCuotas];
-      const cuotaActual = actualizadas[indexActual];
+      const target = actualizadas[index];
+      if (!target) return prevCuotas;
 
-      let montoAnterior = Number(cuotaActual.monto_base || 0);
-      for (let i = indexActual - 1; i >= 0; i--) {
-        if (actualizadas[i].concepto === cuotaActual.concepto) {
-          montoAnterior = Number(actualizadas[i].monto_actualizado || actualizadas[i].monto_base || 0);
-          break;
-        }
+      const estadoNormalizado = String(target.estado || '').toUpperCase().trim();
+      const esGabinete = String(target.concepto || '').toUpperCase().includes('GABINETE');
+      const esAnticipo = String(target.concepto || '').toUpperCase().includes('ANTICIPO');
+
+      // Bloquear cualquier intento de alterar índice si es fija o pago parcial
+      if (esPlanFijo || esGabinete || esAnticipo || estadoNormalizado === 'PAGO_PARCIAL') {
+        return prevCuotas;
       }
 
-      const nuevoMonto = Number((montoAnterior * (1 + porcentajeMensual / 100)).toFixed(2));
-      const coefAcumulado = Number(cuotaActual.monto_base) > 0 
-        ? Number((nuevoMonto / Number(cuotaActual.monto_base)).toFixed(4)) 
-        : 1.0;
+      // Obtener el valor de referencia de la cuota anterior del mismo concepto
+      const cuotaAnterior = getCuotaPreviaMismoConcepto(actualizadas, target);
+      const valorBase = cuotaAnterior
+        ? getMontoNominalIntegro(cuotaAnterior)
+        : Number(target.monto_base || 0);
 
-      actualizadas[indexActual] = {
-        ...cuotaActual,
-        porcentaje_mensual: porcentajeMensual,
-        coeficiente_actualizacion: coefAcumulado,
-        monto_actualizado: nuevoMonto,
+      const nuevoMontoActualizado = Number(
+        (valorBase * (1 + nuevoPorcentaje / 100)).toFixed(2)
+      );
+
+      actualizadas[index] = {
+        ...target,
+        monto_actualizado: nuevoMontoActualizado,
+        coeficiente_actualizacion: Number((1 + nuevoPorcentaje / 100).toFixed(4)),
+        porcentaje_mensual: nuevoPorcentaje,
       };
 
       return actualizadas;
@@ -195,24 +244,6 @@ export const PlanCuotasModal: React.FC<Props> = ({
     } finally {
       setSubmittingPlan(false);
     }
-  };
-
-  // Función para obtener el saldo exigible neto de una cuota
-  const getSaldoExigible = (c: any): number => {
-    if (c.saldo_pendiente !== undefined && c.saldo_pendiente !== null) {
-      return Number(c.saldo_pendiente);
-    }
-    const montoTotal = Number(
-      esPlanFijo ? c.monto_base || 0 : c.monto_actualizado || c.monto_base || 0
-    );
-    // Sumar pagos previos si vienen en el array c.pagos o campo c.monto_pagado
-    const pagado = Number(
-      c.monto_pagado ||
-      (Array.isArray(c.pagos)
-        ? c.pagos.reduce((acc: number, p: any) => acc + Number(p.monto || 0), 0)
-        : 0)
-    );
-    return Math.max(0, montoTotal - pagado);
   };
 
   return (
@@ -282,7 +313,6 @@ export const PlanCuotasModal: React.FC<Props> = ({
                 <span className="text-xs">Cargando estado del contrato...</span>
               </div>
             ) : cuotas.length === 0 ? (
-              /* Vista cuando el lote no tiene cuotas */
               !modoEmision ? (
                 <div className="py-16 text-center space-y-4">
                   <div className="inline-flex p-3 bg-amber-50 text-amber-600 rounded-full">
@@ -308,7 +338,6 @@ export const PlanCuotasModal: React.FC<Props> = ({
                   </div>
                 </div>
               ) : (
-                /* Formulario de Emisión */
                 <form onSubmit={handleEmitirPlan} className="space-y-6">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-200">
                     <div className="flex items-center gap-2">
@@ -360,7 +389,6 @@ export const PlanCuotasModal: React.FC<Props> = ({
                       </div>
                     </div>
 
-                    {/* Cantidad de Cuotas Obra (Numérico Libre) */}
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
                         Cantidad de Cuotas Obra
@@ -380,7 +408,6 @@ export const PlanCuotasModal: React.FC<Props> = ({
                       />
                     </div>
 
-                    {/* Cantidad de Cuotas Gabinete (Numérico Libre, si aplica) */}
                     {cuenta.conexion_gabinete && (
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -511,25 +538,53 @@ export const PlanCuotasModal: React.FC<Props> = ({
                         estadoNormalizado === 'PAGADO' ||
                         estadoNormalizado === 'COBRADA';
                       const isPagoParcial = estadoNormalizado === 'PAGO_PARCIAL';
+                      const esGabinete = String(c.concepto || '').toUpperCase().includes('GABINETE');
+                      const esAnticipo = String(c.concepto || '').toUpperCase().includes('ANTICIPO');
 
-                      // Buscar el valor de la cuota anterior del mismo concepto
-                      let montoAnterior = Number(c.monto_base || 0);
-                      for (let i = index - 1; i >= 0; i--) {
-                        if (cuotas[i].concepto === c.concepto) {
-                          montoAnterior = Number(cuotas[i].monto_actualizado || cuotas[i].monto_base || 0);
-                          break;
+                      // Regla de Negocio: GABINETE, ANTICIPO o contratos FIJO no ajustan por índice
+                      const esConceptoFijo = esPlanFijo || esGabinete || esAnticipo;
+
+                      // Monto a mostrar en la columna ACTUALIZADO
+                      // Para Gabinete / Anticipo se asegura mostrar monto_base ($100.000) si monto_actualizado vino alterado
+                      const montoActualizadoDisplay = esConceptoFijo && !isPagoParcial
+                        ? Number(c.monto_base || c.monto_actualizado || 0)
+                        : Number(c.monto_actualizado || c.monto_base || 0);
+
+                      // Cálculo canónico de la variación mensual relativa
+                      let porcentajeCalculado = 0;
+
+                      if (!esConceptoFijo && !isPagoParcial) {
+                        if (c.porcentaje_mensual !== undefined && c.porcentaje_mensual !== null) {
+                          porcentajeCalculado = Number(c.porcentaje_mensual);
+                        } else {
+                          const cuotaPrevia = getCuotaPreviaMismoConcepto(cuotas, c);
+                          const nominalActual = getMontoNominalIntegro(c);
+
+                          if (cuotaPrevia) {
+                            const nominalAnterior = getMontoNominalIntegro(cuotaPrevia);
+                            // Si los importes son nominalmente iguales, la variación es estrictamente 0
+                            if (Math.abs(nominalActual - nominalAnterior) < 0.01) {
+                              porcentajeCalculado = 0;
+                            } else if (nominalAnterior > 0) {
+                              porcentajeCalculado = Number(
+                                (((nominalActual - nominalAnterior) / nominalAnterior) * 100).toFixed(2)
+                              );
+                            }
+                          } else {
+                            // Primera cuota de este concepto: comparar contra el monto_base
+                            const baseOriginal = Number(c.monto_base || cuenta.cuota_base || 0);
+                            if (baseOriginal > 0 && Math.abs(nominalActual - baseOriginal) >= 0.01) {
+                              porcentajeCalculado = Number(
+                                (((nominalActual - baseOriginal) / baseOriginal) * 100).toFixed(2)
+                              );
+                            } else {
+                              porcentajeCalculado = 0;
+                            }
+                          }
                         }
                       }
 
-                      // Variación porcentual mensual respecto a la cuota inmediatamente anterior
-                      const montoActual = Number(c.monto_actualizado || c.monto_base || 0);
-                      const porcentajeMensual = c.porcentaje_mensual !== undefined
-                        ? Number(c.porcentaje_mensual)
-                        : montoAnterior > 0
-                        ? Number((((montoActual - montoAnterior) / montoAnterior) * 100).toFixed(2))
-                        : 0;
-
-                      const saldoRestante = getSaldoExigible(c);
+                      const porcentajeDisplay = esConceptoFijo ? 0 : porcentajeCalculado;
 
                       return (
                         <tr key={c.id_cuota} className="hover:bg-slate-50/70 transition">
@@ -548,36 +603,39 @@ export const PlanCuotasModal: React.FC<Props> = ({
                               : '-'}
                           </td>
 
-                          {/* Columna AJUSTE ICC (%) / VARIACIÓN (%) */}
-                          <td className="px-3 py-2.5 text-center">
-                            {esPlanFijo ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium text-slate-400 bg-slate-100/80 border border-slate-200">
-                                0.00 % (Fijo)
+                          {/* Columna ÍNDICE / VARIACIÓN */}
+                          <td className="px-3 py-2.5 text-center font-sans">
+                            {esConceptoFijo ? (
+                              // GABINETE, ANTICIPO o Contrato Fijo: badge fijo garantizado
+                              <span className="inline-block px-2 py-1 rounded bg-slate-100 text-slate-500 font-mono text-[11px] font-semibold">
+                                0.00 % <span className="text-[10px] text-slate-400 font-sans">(Fijo)</span>
+                              </span>
+                            ) : isPagoParcial ? (
+                              // PAGO PARCIAL de Obra: indicador congelado
+                              <span
+                                title="Cuota con pago parcial registrado. El ajuste por índice se congela sobre el remanente."
+                                className="inline-flex items-center justify-center px-2 py-1 rounded bg-amber-50 border border-amber-200 text-amber-700 font-mono text-[11px] font-semibold"
+                              >
+                                —
                               </span>
                             ) : isPagado ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200">
-                                {porcentajeMensual >= 0 ? `+${porcentajeMensual.toFixed(2)} %` : `${porcentajeMensual.toFixed(2)} %`}
+                              // Cuota totalmente pagada: texto plano
+                              <span className="font-mono text-xs font-semibold text-slate-500">
+                                {porcentajeDisplay > 0 ? `+${porcentajeDisplay}%` : `${porcentajeDisplay}%`}
                               </span>
                             ) : (
-                              <div className="inline-flex items-center justify-center">
-                                <div className="relative inline-flex items-center">
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    value={porcentajeMensual}
-                                    onChange={(e) =>
-                                      handlePorcentajeChange(
-                                        index,
-                                        parseFloat(e.target.value) || 0
-                                      )
-                                    }
-                                    className="w-20 pr-5 pl-1.5 py-1 text-right font-mono font-bold text-slate-800 bg-white border border-slate-300 rounded-lg focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none text-xs shadow-xs"
-                                    title="Porcentaje de ajuste mensual respecto a la cuota anterior"
-                                  />
-                                  <span className="absolute right-1.5 text-[11px] font-bold text-slate-400 pointer-events-none">
-                                    %
-                                  </span>
-                                </div>
+                              // Cuota PENDIENTE regular ajustable: Input editable
+                              <div className="inline-flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={porcentajeDisplay}
+                                  onChange={(e) =>
+                                    handlePorcentajeChange(index, parseFloat(e.target.value) || 0)
+                                  }
+                                  className="w-16 px-1.5 py-1 text-center font-mono text-xs font-bold text-slate-800 bg-white border border-slate-200 rounded-lg focus:border-brand-500 focus:bg-white outline-none transition"
+                                />
+                                <span className="text-[11px] text-slate-400 font-bold">%</span>
                               </div>
                             )}
                           </td>
@@ -585,7 +643,7 @@ export const PlanCuotasModal: React.FC<Props> = ({
                           {/* Monto Actualizado / Saldo Remanente */}
                           <td className="px-3 py-2.5 text-right font-bold text-slate-900">
                             <div>
-                              ${Number(c.monto_actualizado || c.monto_base || 0).toLocaleString('es-AR', {
+                              ${montoActualizadoDisplay.toLocaleString('es-AR', {
                                 minimumFractionDigits: 2,
                               })}
                               {isPagoParcial && (
@@ -620,7 +678,12 @@ export const PlanCuotasModal: React.FC<Props> = ({
                             ) : (
                               <button
                                 type="button"
-                                onClick={() => setCuotaACobrar(c)}
+                                onClick={() =>
+                                  setCuotaACobrar({
+                                    ...c,
+                                    monto_actualizado: montoActualizadoDisplay,
+                                  })
+                                }
                                 className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold shadow-xs transition"
                               >
                                 <CreditCard className="w-3 h-3" /> Cobrar

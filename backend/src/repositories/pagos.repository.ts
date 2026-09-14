@@ -9,9 +9,9 @@ export class PagosRepository {
     try {
       await client.query('BEGIN');
 
-      // 1. Obtener cuota con bloqueo concurrente
+      // 1. Obtener cuota con bloqueo concurrente (FOR UPDATE)
       const cuotaQuery = `
-        SELECT id_cuota, id_contrato, concepto, periodo, estado, monto_actualizado 
+        SELECT id_cuota, id_contrato, concepto, periodo, estado, monto_actualizado, saldo_remanente 
         FROM cuotas 
         WHERE id_cuota = $1 
         FOR UPDATE;
@@ -29,16 +29,17 @@ export class PagosRepository {
       }
 
       const montoAPagar = Number(data.monto);
-      if (montoAPagar <= 0) {
+      if (isNaN(montoAPagar) || montoAPagar <= 0) {
         throw new Error('El importe de pago debe ser superior a 0.');
       }
 
-      const montoExigible = Number(cuota.monto_actualizado);
-      const saldoRemanente = Number((montoExigible - montoAPagar).toFixed(2));
+      // La exigibilidad real de cobro es el saldo_remanente
+      const saldoExigible = Number(cuota.saldo_remanente);
+      const nuevoSaldo = Number(Math.max(0, saldoExigible - montoAPagar).toFixed(2));
 
-      if (saldoRemanente < -0.01) {
+      if (montoAPagar > saldoExigible + 0.01) {
         throw new Error(
-          `El monto ingresado ($${montoAPagar}) supera el saldo adeudado ($${montoExigible}).`
+          `El monto ingresado ($${montoAPagar.toFixed(2)}) supera el saldo remanente ($${saldoExigible.toFixed(2)}).`
         );
       }
 
@@ -63,44 +64,22 @@ export class PagosRepository {
         data.comprobante ?? null,
       ]);
 
-      // 3. Determinar estado y nuevo valor de la cuota
-      let nuevoEstado: EstadoCuota;
-      let nuevoMontoActualizado: number;
+      // 3. Determinar nuevo estado según el saldo remanente
+      const nuevoEstado: EstadoCuota = nuevoSaldo <= 0.01 ? 'PAGADA' : 'PAGO_PARCIAL';
 
-      if (saldoRemanente <= 0.01) {
-        nuevoEstado = 'PAGADA';
-        nuevoMontoActualizado = montoAPagar; // Se fija en lo efectivamente cancelado
-      } else {
-        nuevoEstado = 'PAGO_PARCIAL';
-        nuevoMontoActualizado = saldoRemanente; // El saldo restante adeudado
-      }
-
+      // 4. Actualizar ÚNICAMENTE saldo_remanente y estado
+      // monto_actualizado permanece intacto como valor nominal contractual
       const updateCuotaQuery = `
         UPDATE cuotas 
         SET 
-          estado = $2,
-          monto_actualizado = $3
-        WHERE id_cuota = $1;
+          saldo_remanente = $1,
+          estado = $2
+        WHERE id_cuota = $3;
       `;
-      await client.query(updateCuotaQuery, [data.id_cuota, nuevoEstado, nuevoMontoActualizado]);
+      await client.query(updateCuotaQuery, [nuevoSaldo, nuevoEstado, data.id_cuota]);
 
-      // 4. Arrastre acumulativo: solo propaga a cuotas futuras pendientes si fue un pago total liquidado
-      if (nuevoEstado === 'PAGADA') {
-        const updateCuotasFuturasQuery = `
-          UPDATE cuotas 
-          SET monto_actualizado = $1 
-          WHERE id_contrato = $2 
-            AND concepto = $3 
-            AND periodo > $4 
-            AND estado = 'PENDIENTE';
-        `;
-        await client.query(updateCuotasFuturasQuery, [
-          montoAPagar,
-          cuota.id_contrato,
-          cuota.concepto,
-          cuota.periodo,
-        ]);
-      }
+      // NOTA: Se eliminó definitivamente la propagación de montos a cuotas futuras.
+      // Los cobros no deben alterar los períodos subsiguientes.
 
       await client.query('COMMIT');
 
@@ -116,27 +95,33 @@ export class PagosRepository {
   async getCuotasByInmueble(id_inmueble: number): Promise<CuotaConPagoDTO[]> {
     const query = `
       SELECT 
-      c.id_cuota,
-      c.id_contrato,
-      ct.id_inmueble,
-      i.clave_cliente,
-      c.concepto,
-      c.nro_cuota,
-      c.periodo,
-      c.monto_base,
-      c.monto_actualizado,
-      c.fecha_vencimiento,
-      c.estado,
-      COALESCE(SUM(p.monto), 0) AS total_abonado,
-      MAX(p.fecha_pago) AS ultima_fecha_pago,
-      MAX(p.comprobante) AS ultimo_comprobante
-    FROM cuotas c
-    INNER JOIN contratos ct ON c.id_contrato = ct.id_contrato
-    INNER JOIN inmuebles i ON ct.id_inmueble = i.id_inmueble
-    LEFT JOIN pagos p ON c.id_cuota = p.id_cuota
-    WHERE i.id_inmueble = $1
-    GROUP BY c.id_cuota, c.id_contrato, ct.id_inmueble, i.clave_cliente
-    ORDER BY c.fecha_vencimiento ASC, c.concepto ASC;
+        c.id_cuota,
+        c.id_contrato,
+        ct.id_inmueble,
+        i.clave_cliente,
+        c.concepto,
+        c.nro_cuota,
+        c.periodo,
+        c.monto_base,
+        c.monto_actualizado,
+        c.saldo_remanente,
+        c.fecha_vencimiento,
+        c.estado,
+        COALESCE(SUM(p.monto), 0) AS total_abonado,
+        MAX(p.fecha_pago) AS ultima_fecha_pago,
+        MAX(p.comprobante) AS ultimo_comprobante
+      FROM cuotas c
+      INNER JOIN contratos ct ON c.id_contrato = ct.id_contrato
+      INNER JOIN inmuebles i ON ct.id_inmueble = i.id_inmueble
+      LEFT JOIN pagos p ON c.id_cuota = p.id_cuota
+      WHERE i.id_inmueble = $1
+      GROUP BY 
+        c.id_cuota, 
+        c.id_contrato, 
+        ct.id_inmueble, 
+        i.clave_cliente,
+        c.saldo_remanente
+      ORDER BY c.fecha_vencimiento ASC, c.concepto ASC;
     `;
     const result = await pool.query(query, [id_inmueble]);
     return result.rows;

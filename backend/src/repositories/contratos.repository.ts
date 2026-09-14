@@ -26,8 +26,7 @@ export class ContratosRepository {
     const result = await pool.query(query, [id_inmueble]);
     return result.rows[0] || null;
   }
-
-  /**
+/**
    * Inserta contrato y genera cuotas masivamente dentro de una transacción SQL
    */
   async emitirContratoConCuotas(
@@ -74,7 +73,7 @@ export class ContratosRepository {
       const contratoCreado: ContratoResponseDTO = contratoRes.rows[0];
       const idContrato = contratoCreado.id_contrato;
 
-      // 2. Insert Masivo de Cuotas
+      // 2. Insert Masivo de Cuotas (9 campos: incluye saldo_remanente)
       if (cuotas.length > 0) {
         const valuePlaceholders: string[] = [];
         const flatValues: any[] = [];
@@ -82,7 +81,7 @@ export class ContratosRepository {
 
         for (const cuota of cuotas) {
           valuePlaceholders.push(
-            `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7})`
+            `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8})`
           );
           flatValues.push(
             idContrato,
@@ -91,10 +90,11 @@ export class ContratosRepository {
             cuota.periodo,
             cuota.monto_base,
             cuota.monto_actualizado,
+            cuota.saldo_remanente ?? cuota.monto_actualizado, // Inicializa con monto_actualizado
             cuota.fecha_vencimiento,
             cuota.estado
           );
-          paramIndex += 8;
+          paramIndex += 9;
         }
 
         const insertCuotasQuery = `
@@ -105,6 +105,7 @@ export class ContratosRepository {
             periodo,
             monto_base,
             monto_actualizado,
+            saldo_remanente,
             fecha_vencimiento,
             estado
           )
