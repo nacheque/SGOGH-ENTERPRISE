@@ -19,3 +19,23 @@ export const getCuotasByInmueble = async (req: Request, res: Response, next: Nex
     next(error);
   }
 };
+
+export const patchIndiceCuota = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const idCuota = Number(req.params.id);
+    const { porcentaje_actualizacion } = req.body;
+
+    const pagosService = new PagosService();
+    await pagosService.actualizarIndiceCuota(idCuota, porcentaje_actualizacion);
+
+    res.status(200).json({
+      status: 'success',
+      message: `Índice de la cuota #${idCuota} actualizado correctamente.`,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      status: 'error',
+      message: error.message,
+    });
+  }
+};

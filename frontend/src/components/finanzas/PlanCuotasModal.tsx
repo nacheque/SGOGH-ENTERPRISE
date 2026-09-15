@@ -30,7 +30,7 @@ export const PlanCuotasModal: React.FC<Props> = ({
   showToast,
   onPlanCreado,
 }) => {
-  const [cuotas, setCuotas] = useState<any[]>([]);
+  const [cuotas, setCuotas] = useState<CuotaConPagoDTO[]>([]);
   const [loadingCuotas, setLoadingCuotas] = useState(false);
   const [modoEmision, setModoEmision] = useState(false);
   const [submittingPlan, setSubmittingPlan] = useState(false);
@@ -55,29 +55,36 @@ export const PlanCuotasModal: React.FC<Props> = ({
     setFechaPrimerVencimiento(`${yyyy}-${mm}-${dd}`);
   }, [isOpen]);
 
-  // Cargar cuotas procesando res.data.data
+  // Cargar cuotas forzando bypass de caché HTTP 304
   const fetchCuotas = async (idInmueble: number) => {
     try {
       setLoadingCuotas(true);
-      const res = await api.get(`/cuotas/inmueble/${idInmueble}`);
+      const res = await api.get(`/cuotas/inmueble/${idInmueble}`, {
+        params: { _t: Date.now() },
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      });
+
       const rawList = Array.isArray(res.data?.data)
         ? res.data.data
         : Array.isArray(res.data)
         ? res.data
         : [];
 
-      // Inicializar cada cuota asegurando coeficiente numérico
-      const formatted = rawList.map((c: any) => {
+      const formatted: CuotaConPagoDTO[] = rawList.map((c: any) => {
         const base = Number(c.monto_base || 0);
-        const act = Number(c.monto_actualizado || c.monto_base || 0);
-        const coefCalculado =
-          Number(c.coeficiente_actualizacion || c.indice_aplicado) ||
-          (base > 0 ? Number((act / base).toFixed(4)) : 1.0);
+        const act = Number(c.monto_actualizado ?? base);
+        const remanente = Number(c.saldo_remanente ?? (c.estado === 'PAGADA' ? 0 : act));
 
         return {
           ...c,
-          coeficiente_actualizacion: coefCalculado,
+          monto_base: base,
           monto_actualizado: act,
+          saldo_remanente: remanente,
+          porcentaje_actualizacion: Number(c.porcentaje_actualizacion || 0),
+          total_abonado: Number(c.total_abonado || 0),
         };
       });
 
@@ -103,7 +110,6 @@ export const PlanCuotasModal: React.FC<Props> = ({
 
   if (!isOpen || !cuenta) return null;
 
-  // Valores numéricos seguros
   const costoObra = Number(cuenta.costo_obra) || 0;
   const servDom = cuenta.conexion_gabinete ? Number(cuenta.serv_dom) || 0 : 0;
   const metrosFrenteNum = Number(cuenta.metros_frente) || 0;
@@ -115,47 +121,12 @@ export const PlanCuotasModal: React.FC<Props> = ({
   const cantCuotasGab = Number(planCuotasGabinete) > 0 ? Number(planCuotasGabinete) : 1;
   const cuotaBaseGabineteSimulada = servDom > 0 ? servDom / cantCuotasGab : 0;
 
-  // Detección de contrato con modalidad fija
-  const esPlanFijo = String(cuenta.tipo_indexacion || '').toUpperCase() === 'FIJO';
-
   /**
-   * Obtiene el valor nominal íntegro de la cuota.
-   * SOLO en estado PAGO_PARCIAL se suma total_abonado a monto_actualizado
-   * porque monto_actualizado contiene únicamente el saldo remanente.
-   * Si está PAGADA o PENDIENTE, monto_actualizado (o monto_base) ya representa el valor íntegro.
+   * Obtiene la cuota previa DEL MISMO CONCEPTO ordenada por período.
    */
-  const getMontoNominalIntegro = (c: any): number => {
-    const estado = String(c.estado || '').toUpperCase().trim();
-    const esGabinete = String(c.concepto || '').toUpperCase().includes('GABINETE');
-    const esAnticipo = String(c.concepto || '').toUpperCase().includes('ANTICIPO');
-
-    // Para conceptos de valor fijo (Gabinete/Anticipo), el nominal es siempre monto_base
-    if (esGabinete || esAnticipo) {
-      return Number(c.monto_base || 0);
-    }
-
-    const act = Number(c.monto_actualizado || c.monto_base || 0);
-
-    if (estado === 'PAGO_PARCIAL') {
-      const abonado = Number(
-        c.total_abonado ??
-        c.monto_pagado ??
-        (Array.isArray(c.pagos)
-          ? c.pagos.reduce((acc: number, p: any) => acc + Number(p.monto || 0), 0)
-          : 0)
-      );
-      return act + abonado;
-    }
-
-    return act;
-  };
-
-  /**
-   * Busca la cuota previa DEL MISMO CONCEPTO estrictamente cronológica por período.
-   */
-  const getCuotaPreviaMismoConcepto = (lista: any[], cuotaActual: any) => {
+  const getCuotaPrevia = (cuotaActual: CuotaConPagoDTO) => {
     return (
-      lista
+      cuotas
         .filter(
           (c) =>
             c.concepto === cuotaActual.concepto &&
@@ -166,44 +137,6 @@ export const PlanCuotasModal: React.FC<Props> = ({
     );
   };
 
-  // Manejador del cambio porcentual mensual respecto a la cuota anterior
-  const handlePorcentajeChange = (index: number, nuevoPorcentaje: number) => {
-    setCuotas((prevCuotas) => {
-      const actualizadas = [...prevCuotas];
-      const target = actualizadas[index];
-      if (!target) return prevCuotas;
-
-      const estadoNormalizado = String(target.estado || '').toUpperCase().trim();
-      const esGabinete = String(target.concepto || '').toUpperCase().includes('GABINETE');
-      const esAnticipo = String(target.concepto || '').toUpperCase().includes('ANTICIPO');
-
-      // Bloquear cualquier intento de alterar índice si es fija o pago parcial
-      if (esPlanFijo || esGabinete || esAnticipo || estadoNormalizado === 'PAGO_PARCIAL') {
-        return prevCuotas;
-      }
-
-      // Obtener el valor de referencia de la cuota anterior del mismo concepto
-      const cuotaAnterior = getCuotaPreviaMismoConcepto(actualizadas, target);
-      const valorBase = cuotaAnterior
-        ? getMontoNominalIntegro(cuotaAnterior)
-        : Number(target.monto_base || 0);
-
-      const nuevoMontoActualizado = Number(
-        (valorBase * (1 + nuevoPorcentaje / 100)).toFixed(2)
-      );
-
-      actualizadas[index] = {
-        ...target,
-        monto_actualizado: nuevoMontoActualizado,
-        coeficiente_actualizacion: Number((1 + nuevoPorcentaje / 100).toFixed(4)),
-        porcentaje_mensual: nuevoPorcentaje,
-      };
-
-      return actualizadas;
-    });
-  };
-
-  // Manejo del Envío a la API para emitir contrato nuevo
   const handleEmitirPlan = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -211,12 +144,10 @@ export const PlanCuotasModal: React.FC<Props> = ({
       showToast('El anticipo no puede ser mayor o igual al costo total de la obra.', 'error');
       return;
     }
-
     if (planCuotasObra <= 0) {
       showToast('Debe seleccionar un plan de cuotas de obra válido.', 'error');
       return;
     }
-
     if (!fechaPrimerVencimiento) {
       showToast('La fecha del primer vencimiento es obligatoria.', 'error');
       return;
@@ -224,7 +155,6 @@ export const PlanCuotasModal: React.FC<Props> = ({
 
     try {
       setSubmittingPlan(true);
-
       await api.post('/contratos', {
         id_inmueble: cuenta.id_inmueble,
         plan_cuotas_obra: Number(planCuotasObra),
@@ -246,11 +176,49 @@ export const PlanCuotasModal: React.FC<Props> = ({
     }
   };
 
+  /**
+   * Obtiene el monto proyectado para una cuota PENDIENTE de RED_OBRA.
+   * Si no tiene porcentaje propio, busca el valor contractual de la última cuota anterior del mismo concepto.
+   */
+  const getMontoProyectadoPendiente = (cuotaActual: CuotaConPagoDTO): number => {
+    if (cuotaActual.concepto !== 'RED_OBRA') {
+      return Number(cuotaActual.monto_actualizado || cuotaActual.monto_base || 0);
+    }
+
+    // Si ya tiene porcentaje propio aplicado (> 0), respetamos su propio monto
+    if (Number(cuotaActual.porcentaje_actualizacion || 0) > 0) {
+      return Number(cuotaActual.monto_actualizado || 0);
+    }
+
+    // Buscamos todas las cuotas anteriores del mismo concepto ordenadas cronológicamente
+    const cuotasPrevias = cuotas
+      .filter(
+        (c) =>
+          c.concepto === cuotaActual.concepto &&
+          String(c.periodo || '') < String(cuotaActual.periodo || '')
+      )
+      .sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)));
+
+    const cuotaAnterior = cuotasPrevias.pop();
+
+    if (cuotaAnterior) {
+      // Si la anterior es PENDIENTE (y tampoco tiene índice), recursivamente proyectará el piso más reciente
+      const montoPiso =
+        cuotaAnterior.estado === 'PENDIENTE' && Number(cuotaAnterior.porcentaje_actualizacion || 0) === 0
+          ? getMontoProyectadoPendiente(cuotaAnterior)
+          : Number(cuotaAnterior.monto_actualizado || cuotaAnterior.monto_base || 0);
+
+      return montoPiso;
+    }
+
+    return Number(cuotaActual.monto_actualizado || cuotaActual.monto_base || 0);
+  };
+
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
         <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh]">
-          {/* Cabecera del Modal */}
+          {/* Cabecera */}
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-brand-50 text-brand-600 rounded-xl">
@@ -275,7 +243,7 @@ export const PlanCuotasModal: React.FC<Props> = ({
             </button>
           </div>
 
-          {/* Resumen Superior del Lote: 5 Tarjetas */}
+          {/* Resumen Superior */}
           <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 text-xs font-mono">
             <div>
               <span className="text-slate-400 block text-[10px] uppercase font-bold">Costo Obra</span>
@@ -305,7 +273,7 @@ export const PlanCuotasModal: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Cuerpo del Modal */}
+          {/* Contenido */}
           <div className="flex-1 overflow-y-auto p-6">
             {loadingCuotas ? (
               <div className="py-20 flex flex-col items-center justify-center gap-2 text-slate-400">
@@ -323,8 +291,7 @@ export const PlanCuotasModal: React.FC<Props> = ({
                       Inmueble sin Plan de Pagos Emitido
                     </h4>
                     <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
-                      Este lote se encuentra registrado en el padrón pero aún no cuenta con un contrato
-                      formal ni cuotas de amortización generadas.
+                      Este lote no cuenta con un contrato formal ni cuotas de amortización generadas.
                     </p>
                   </div>
                   <div>
@@ -515,7 +482,7 @@ export const PlanCuotasModal: React.FC<Props> = ({
                 </form>
               )
             ) : (
-              /* Tabla de Cuotas con Índice Parametrizable y Cobro */
+              /* Tabla de Cuotas */
               <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
                 <table className="w-full text-left text-xs text-slate-600">
                   <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
@@ -525,71 +492,29 @@ export const PlanCuotasModal: React.FC<Props> = ({
                       <th className="px-3 py-2.5">Período</th>
                       <th className="px-3 py-2.5">Vencimiento</th>
                       <th className="px-3 py-2.5 text-center w-28">Índice</th>
-                      <th className="px-3 py-2.5 text-right">Actualizado</th>
+                      <th className="px-3 py-2.5 text-right">Actualizado / A Cobrar</th>
                       <th className="px-3 py-2.5 text-center">Estado</th>
                       <th className="px-3 py-2.5 text-center">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-mono">
-                    {cuotas.map((c, index) => {
+                    {cuotas.map((c) => {
                       const estadoNormalizado = String(c.estado || '').toUpperCase().trim();
-                      const isPagado =
-                        estadoNormalizado === 'PAGADA' ||
-                        estadoNormalizado === 'PAGADO' ||
-                        estadoNormalizado === 'COBRADA';
+                      const isPagado = estadoNormalizado === 'PAGADA' || estadoNormalizado === 'PAGADO';
                       const isPagoParcial = estadoNormalizado === 'PAGO_PARCIAL';
-                      const esGabinete = String(c.concepto || '').toUpperCase().includes('GABINETE');
-                      const esAnticipo = String(c.concepto || '').toUpperCase().includes('ANTICIPO');
+                      const esObra = c.concepto === 'RED_OBRA';
 
-                      // Regla de Negocio: GABINETE, ANTICIPO o contratos FIJO no ajustan por índice
-                      const esConceptoFijo = esPlanFijo || esGabinete || esAnticipo;
+                      // Lectura directa del porcentaje persistido
+                      const porcentajeMostrado = Number(c.porcentaje_actualizacion || 0);
 
-                      // Monto a mostrar en la columna ACTUALIZADO
-                      // Para Gabinete / Anticipo se asegura mostrar monto_base ($100.000) si monto_actualizado vino alterado
-                      const montoActualizadoDisplay = esConceptoFijo && !isPagoParcial
-                        ? Number(c.monto_base || c.monto_actualizado || 0)
-                        : Number(c.monto_actualizado || c.monto_base || 0);
-
-                      // Cálculo canónico de la variación mensual relativa
-                      let porcentajeCalculado = 0;
-
-                      if (!esConceptoFijo && !isPagoParcial) {
-                        if (c.porcentaje_mensual !== undefined && c.porcentaje_mensual !== null) {
-                          porcentajeCalculado = Number(c.porcentaje_mensual);
-                        } else {
-                          const cuotaPrevia = getCuotaPreviaMismoConcepto(cuotas, c);
-                          const nominalActual = getMontoNominalIntegro(c);
-
-                          if (cuotaPrevia) {
-                            const nominalAnterior = getMontoNominalIntegro(cuotaPrevia);
-                            // Si los importes son nominalmente iguales, la variación es estrictamente 0
-                            if (Math.abs(nominalActual - nominalAnterior) < 0.01) {
-                              porcentajeCalculado = 0;
-                            } else if (nominalAnterior > 0) {
-                              porcentajeCalculado = Number(
-                                (((nominalActual - nominalAnterior) / nominalAnterior) * 100).toFixed(2)
-                              );
-                            }
-                          } else {
-                            // Primera cuota de este concepto: comparar contra el monto_base
-                            const baseOriginal = Number(c.monto_base || cuenta.cuota_base || 0);
-                            if (baseOriginal > 0 && Math.abs(nominalActual - baseOriginal) >= 0.01) {
-                              porcentajeCalculado = Number(
-                                (((nominalActual - baseOriginal) / baseOriginal) * 100).toFixed(2)
-                              );
-                            } else {
-                              porcentajeCalculado = 0;
-                            }
-                          }
-                        }
-                      }
-
-                      const porcentajeDisplay = esConceptoFijo ? 0 : porcentajeCalculado;
+                      // Deuda viva exigible
+                      const saldoRemanente = Number(c.saldo_remanente ?? 0);
+                      const puedeCobrar = saldoRemanente > 0.01 && !isPagado;
 
                       return (
                         <tr key={c.id_cuota} className="hover:bg-slate-50/70 transition">
                           <td className="px-3 py-2.5 text-center font-bold text-slate-700">
-                            {c.nro_cuota ?? c.numero_cuota}
+                            {c.nro_cuota}
                           </td>
                           <td className="px-3 py-2.5 font-sans font-medium text-slate-800">
                             {c.concepto === 'RED_OBRA' ? 'Cuota Obra' : c.concepto}
@@ -603,55 +528,53 @@ export const PlanCuotasModal: React.FC<Props> = ({
                               : '-'}
                           </td>
 
-                          {/* Columna ÍNDICE / VARIACIÓN */}
+                          {/* Columna ÍNDICE */}
                           <td className="px-3 py-2.5 text-center font-sans">
-                            {esConceptoFijo ? (
-                              // GABINETE, ANTICIPO o Contrato Fijo: badge fijo garantizado
-                              <span className="inline-block px-2 py-1 rounded bg-slate-100 text-slate-500 font-mono text-[11px] font-semibold">
+                            {!esObra ? (
+                              <span className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-500 font-mono text-[11px] font-semibold">
                                 0.00 % <span className="text-[10px] text-slate-400 font-sans">(Fijo)</span>
                               </span>
-                            ) : isPagoParcial ? (
-                              // PAGO PARCIAL de Obra: indicador congelado
-                              <span
-                                title="Cuota con pago parcial registrado. El ajuste por índice se congela sobre el remanente."
-                                className="inline-flex items-center justify-center px-2 py-1 rounded bg-amber-50 border border-amber-200 text-amber-700 font-mono text-[11px] font-semibold"
-                              >
-                                —
-                              </span>
-                            ) : isPagado ? (
-                              // Cuota totalmente pagada: texto plano
-                              <span className="font-mono text-xs font-semibold text-slate-500">
-                                {porcentajeDisplay > 0 ? `+${porcentajeDisplay}%` : `${porcentajeDisplay}%`}
-                              </span>
                             ) : (
-                              // Cuota PENDIENTE regular ajustable: Input editable
-                              <div className="inline-flex items-center gap-1">
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  value={porcentajeDisplay}
-                                  onChange={(e) =>
-                                    handlePorcentajeChange(index, parseFloat(e.target.value) || 0)
-                                  }
-                                  className="w-16 px-1.5 py-1 text-center font-mono text-xs font-bold text-slate-800 bg-white border border-slate-200 rounded-lg focus:border-brand-500 focus:bg-white outline-none transition"
-                                />
-                                <span className="text-[11px] text-slate-400 font-bold">%</span>
-                              </div>
+                              <span
+                                className={`font-mono text-xs font-semibold px-2 py-0.5 rounded ${
+                                  isPagado ? 'text-slate-400 bg-slate-50' : 'text-slate-700 bg-slate-100/70'
+                                }`}
+                              >
+                                {porcentajeMostrado > 0 ? `+${porcentajeMostrado}%` : `${porcentajeMostrado}%`}
+                              </span>
                             )}
                           </td>
 
-                          {/* Monto Actualizado / Saldo Remanente */}
+                          {/* Columna ACTUALIZADO / A COBRAR */}
                           <td className="px-3 py-2.5 text-right font-bold text-slate-900">
-                            <div>
-                              ${montoActualizadoDisplay.toLocaleString('es-AR', {
-                                minimumFractionDigits: 2,
-                              })}
-                              {isPagoParcial && (
+                            {isPagoParcial ? (
+                              <div>
+                                <span className="text-amber-700">
+                                  ${saldoRemanente.toLocaleString('es-AR', {
+                                    minimumFractionDigits: 2,
+                                  })}
+                                </span>
                                 <span className="block text-[10px] text-amber-600 font-sans font-normal">
                                   (Saldo remanente)
                                 </span>
-                              )}
-                            </div>
+                              </div>
+                            ) : isPagado ? (
+                              <div className="inline-flex items-center justify-end gap-1.5 font-mono text-xs text-emerald-700 bg-emerald-50/80 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                <span>
+                                  ${Number(c.monto_actualizado || c.monto_base || 0).toLocaleString('es-AR', {
+                                    minimumFractionDigits: 2,
+                                  })}
+                                </span>
+                              </div>
+                            ) : (
+                              // Cuota PENDIENTE: renderiza el monto proyectado del piso contractual vigente
+                              <span>
+                                ${getMontoProyectadoPendiente(c).toLocaleString('es-AR', {
+                                  minimumFractionDigits: 2,
+                                })}
+                              </span>
+                            )}
                           </td>
 
                           {/* Estado */}
@@ -672,19 +595,22 @@ export const PlanCuotasModal: React.FC<Props> = ({
                           {/* Acción de Cobro */}
                           <td className="px-3 py-2.5 text-center font-sans">
                             {isPagado ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50/60 px-2 py-1 rounded-lg border border-emerald-200">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50/60 px-2.5 py-1 rounded-lg border border-emerald-200">
                                 <Check className="w-3.5 h-3.5" /> Pagada
                               </span>
                             ) : (
                               <button
                                 type="button"
-                                onClick={() =>
-                                  setCuotaACobrar({
-                                    ...c,
-                                    monto_actualizado: montoActualizadoDisplay,
-                                  })
-                                }
-                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold shadow-xs transition"
+                                disabled={!puedeCobrar}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCuotaACobrar(c);
+                                }}
+                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-xs transition ${
+                                  puedeCobrar
+                                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-95'
+                                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                }`}
                               >
                                 <CreditCard className="w-3 h-3" /> Cobrar
                               </button>
@@ -699,7 +625,7 @@ export const PlanCuotasModal: React.FC<Props> = ({
             )}
           </div>
 
-          {/* Pie del Modal */}
+          {/* Pie */}
           <div className="px-6 py-3 border-t border-slate-100 flex items-center justify-end bg-slate-50/50">
             <button
               type="button"
@@ -712,17 +638,21 @@ export const PlanCuotasModal: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Modal Hijo: Imputación de Cobro */}
-      <CobrarCuotaModal
-        cuota={cuotaACobrar}
-        isOpen={Boolean(cuotaACobrar)}
-        onClose={() => setCuotaACobrar(null)}
-        showToast={showToast}
-        onSuccess={async () => {
-          await fetchCuotas(cuenta.id_inmueble);
-          onPlanCreado?.();
-        }}
-      />
+      {/* Modal de Cobro con resolución de Cuota Anterior Inmediata */}
+      {cuotaACobrar && (
+        <CobrarCuotaModal
+          cuota={cuotaACobrar}
+          cuotaAnterior={getCuotaPrevia(cuotaACobrar)}
+          isOpen={true}
+          onClose={() => setCuotaACobrar(null)}
+          showToast={showToast}
+          onSuccess={async () => {
+            setCuotaACobrar(null);
+            await fetchCuotas(cuenta.id_inmueble);
+            onPlanCreado?.();
+          }}
+        />
+      )}
     </>
   );
 };

@@ -105,6 +105,7 @@ export interface CreateInmuebleDTO {
 // ==========================================
 export interface CuentaCorrienteRow {
   id_inmueble: number;
+  id_obra: number;
   id_contrato: number | null;
   tiene_contrato: boolean;
   clave?: string;
@@ -138,12 +139,33 @@ export interface CuentaCorrienteRow {
 // ==========================================
 // INTERFACES DE CUOTAS Y PAGOS
 // ==========================================
-export type EstadoCuota = 'PENDIENTE' | 'PAGADA' | 'VENCIDA';
-export type MedioPago = 'TRANSFERENCIA' | 'EFECTIVO' | 'CHEQUE' | string;
+export type EstadoCuota = 'PENDIENTE' | 'PAGADA' | 'PAGO_PARCIAL' | 'VENCIDA';
+export type MedioPago = 'TRANSFERENCIA' | 'EFECTIVO' | 'CHEQUE' | 'DEBITO' | string;
+
+export interface Cuota {
+  id_cuota: number;
+  id_contrato?: number;
+  id_inmueble: number;
+  clave_cliente?: string;
+  nro_cuota: number;
+  concepto: 'RED_OBRA' | 'GABINETE' | 'ANTICIPO' | string;
+  periodo: string;
+  fecha_vencimiento?: string;
+  monto_base: number;
+  monto_actualizado: number; // Valor nominal contractual del mes
+  saldo_remanente: number;   // Deuda viva exigible
+  total_abonado?: number;
+  porcentaje_actualizacion?: number;
+  coeficiente_actualizacion?: number;
+  indice_aplicado?: number;
+  porcentaje_mensual?: number;
+  estado: EstadoCuota;
+}
 
 export interface CreatePagoDTO {
   id_cuota: number;
   monto: number;
+  porcentaje_actualizacion?: number;
   fecha_pago?: string | null; // 'YYYY-MM-DD'
   medio_pago: MedioPago;
   comprobante?: string | null;
@@ -158,23 +180,15 @@ export interface PagoResponseDTO {
   comprobante: string | null;
 }
 
-export interface CuotaConPagoDTO {
-  id_cuota: number;
-  id_contrato: number;
-  id_inmueble: number;
-  clave_cliente: string;
-  concepto: string;
-  nro_cuota: number;
-  periodo: string;
-  monto_base: string | number;
-  monto_actualizado: string | number;
-  fecha_vencimiento: string;
-  estado: EstadoCuota;
-  id_pago: number | null;
-  monto: string | number | null;
-  fecha_pago: string | null;
-  medio_pago: string | null;
-  comprobante: string | null;
+export interface CuotaConPagoDTO extends Cuota {
+  id_pago?: number | null;
+  monto?: string | number | null;
+  fecha_pago?: string | null;
+  medio_pago?: string | null;
+  comprobante?: string | null;
+  ultima_fecha_pago?: string | null;
+  ultimo_comprobante?: string | null;
+  pagos?: PagoResponseDTO[];
 }
 
 // ==========================================

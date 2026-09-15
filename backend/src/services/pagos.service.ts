@@ -22,7 +22,22 @@ export class PagosService {
       id_cuota: Number(dto.id_cuota),
       monto: Number(dto.monto),
       medio_pago: dto.medio_pago.toUpperCase().trim(),
+      porcentaje_actualizacion:
+        dto.porcentaje_actualizacion !== undefined && dto.porcentaje_actualizacion !== null
+          ? Number(dto.porcentaje_actualizacion)
+          : null,
     });
+  }
+
+  async actualizarIndiceCuota(idCuota: number, porcentaje: number): Promise<void> {
+    if (!idCuota || isNaN(idCuota)) {
+      throw new Error('El id_cuota proporcionado no es válido.');
+    }
+    if (porcentaje === undefined || isNaN(Number(porcentaje))) {
+      throw new Error('El porcentaje de actualización debe ser un número válido.');
+    }
+
+    await this.pagosRepo.actualizarIndiceCuota(Number(idCuota), Number(porcentaje));
   }
 
   async listarCuotasPorInmueble(id_inmueble: number): Promise<CuotaConPagoDTO[]> {
