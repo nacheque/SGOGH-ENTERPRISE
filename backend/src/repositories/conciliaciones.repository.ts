@@ -1,4 +1,5 @@
 import { pool } from '../config/database';
+import { PoolClient } from 'pg';
 import { EstadoCuota } from '../types/contratos.types';
 import { PagoConfirmarDTO } from '../types/conciliaciones.types';
 
@@ -39,11 +40,13 @@ export class ConciliacionesRepository {
   /**
    * Obtiene todas las cuotas exigibles ordenadas cronológicamente para cascada
    */
-async findCuotasExigiblesByInmueble(idInmueble: number): Promise<Array<{
+  async findCuotasExigiblesByInmueble(idInmueble: number): Promise<Array<{
     id_cuota: number;
     nro_cuota: number;
+    monto_base: string | number;
     monto_actualizado: string | number;
     saldo_remanente: string | number;
+    porcentaje_actualizacion: number;
     estado: EstadoCuota;
     concepto: string;
     periodo: string;
@@ -51,26 +54,61 @@ async findCuotasExigiblesByInmueble(idInmueble: number): Promise<Array<{
   }>> {
     const query = `
       SELECT 
-        c.id_cuota, 
-        c.nro_cuota, 
-        c.monto_actualizado, 
-        c.saldo_remanente,
-        c.estado,
-        c.concepto,
-        c.periodo,
-        c.id_contrato
-      FROM cuotas c
-      INNER JOIN contratos ct ON c.id_contrato = ct.id_contrato
-      WHERE ct.id_inmueble = $1
-        AND c.estado IN ('PENDIENTE', 'PAGO_PARCIAL')
-      ORDER BY c.fecha_vencimiento ASC, c.nro_cuota ASC, c.id_cuota ASC;
+      c.id_cuota, 
+      c.nro_cuota, 
+      c.monto_base,
+      c.monto_actualizado, 
+      c.saldo_remanente,
+      CAST(COALESCE(c.porcentaje_actualizacion, 0.00) AS FLOAT) AS porcentaje_actualizacion,
+      c.estado,
+      c.concepto,
+      c.periodo,
+      c.id_contrato
+    FROM cuotas c
+    INNER JOIN contratos ct ON c.id_contrato = ct.id_contrato
+    WHERE ct.id_inmueble = $1
+      AND c.concepto = 'RED_OBRA'
+      AND c.estado IN ('PENDIENTE', 'PAGO_PARCIAL')
+    ORDER BY c.fecha_vencimiento ASC, c.nro_cuota ASC, c.id_cuota ASC;
     `;
     const res = await pool.query(query, [idInmueble]);
     return res.rows;
   }
 
   /**
-   * Ejecuta la imputación atómica de pagos con bloqueo pesimista y arrastre futuro
+   * Obtiene el piso base encadenado (monto_actualizado de la cuota anterior inmediata del mismo concepto).
+   */
+  private async obtenerPisoBase(
+    client: PoolClient,
+    idContrato: number,
+    concepto: string,
+    nroCuota: number,
+    montoBaseActual: number
+  ): Promise<number> {
+    if (nroCuota <= 1) {
+      return montoBaseActual;
+    }
+
+    const prevQuery = `
+      SELECT monto_actualizado 
+      FROM cuotas 
+      WHERE id_contrato = $1 
+        AND concepto = $2 
+        AND nro_cuota < $3 
+      ORDER BY nro_cuota DESC 
+      LIMIT 1;
+    `;
+    const res = await client.query(prevQuery, [idContrato, concepto, nroCuota]);
+
+    if (res.rows.length > 0 && res.rows[0].monto_actualizado !== null) {
+      return Number(res.rows[0].monto_actualizado);
+    }
+
+    return montoBaseActual;
+  }
+
+  /**
+   * Ejecuta la imputación atómica de pagos respetando la inferencia de índices y remanentes
    */
   async imputarLoteTransaccional(pagos: PagoConfirmarDTO[]): Promise<Array<{
     id_pago: number;
@@ -86,9 +124,19 @@ async findCuotasExigiblesByInmueble(idInmueble: number): Promise<Array<{
       const resultados = [];
 
       for (const item of pagos) {
-        // Bloqueo pesimista sobre la cuota incluyendo saldo_remanente
+        // 1. Bloqueo pesimista sobre la cuota
         const cuotaQuery = `
-          SELECT id_cuota, id_contrato, concepto, periodo, estado, monto_actualizado, saldo_remanente
+          SELECT 
+            id_cuota, 
+            id_contrato, 
+            concepto, 
+            nro_cuota,
+            periodo, 
+            estado, 
+            monto_base,
+            monto_actualizado, 
+            saldo_remanente,
+            COALESCE(porcentaje_actualizacion, 0.00) AS porcentaje_actualizacion
           FROM cuotas
           WHERE id_cuota = $1
           FOR UPDATE;
@@ -106,16 +154,48 @@ async findCuotasExigiblesByInmueble(idInmueble: number): Promise<Array<{
         }
 
         const montoPagado = Number(item.monto);
-        const saldoExigible = Number(cuota.saldo_remanente);
-        const nuevoSaldo = Number(Math.max(0, saldoExigible - montoPagado).toFixed(2));
+        let porcentajeFinal = Number(cuota.porcentaje_actualizacion);
+        let montoActualizadoFinal = Number(cuota.monto_actualizado);
+        let nuevoSaldo = 0;
+        let nuevoEstado: EstadoCuota = 'PAGADA';
 
-        if (montoPagado > saldoExigible + 0.01) {
-          throw new Error(
-            `El monto a imputar ($${montoPagado}) excede el saldo remanente de la cuota #${item.id_cuota} ($${saldoExigible}).`
+        // 2. Lógica contable e inferencia de índice
+        if (cuota.estado === 'PAGO_PARCIAL') {
+          // El índice ya se fijó previamente; imputamos directo contra saldo_remanente
+          const remanenteActual = Number(cuota.saldo_remanente);
+          if (montoPagado > remanenteActual + 0.01) {
+            throw new Error(
+              `El monto ($${montoPagado}) excede el saldo remanente ($${remanenteActual}) de la cuota #${item.id_cuota}.`
+            );
+          }
+          nuevoSaldo = Number(Math.max(0, remanenteActual - montoPagado).toFixed(2));
+          nuevoEstado = nuevoSaldo <= 0.01 ? 'PAGADA' : 'PAGO_PARCIAL';
+        } else {
+          // Cuota PENDIENTE: buscar piso base encadenado
+          const pisoBase = await this.obtenerPisoBase(
+            client,
+            cuota.id_contrato,
+            cuota.concepto,
+            Number(cuota.nro_cuota),
+            Number(cuota.monto_base)
           );
+
+          if (montoPagado >= pisoBase) {
+            // Se infiere el índice por el excedente sobre el piso base
+            porcentajeFinal = Number((((montoPagado / pisoBase) - 1) * 100).toFixed(2));
+            montoActualizadoFinal = montoPagado;
+            nuevoSaldo = 0;
+            nuevoEstado = 'PAGADA';
+          } else {
+            // Cobro parcial inferior al piso base
+            porcentajeFinal = 0.00;
+            montoActualizadoFinal = pisoBase;
+            nuevoSaldo = Number((pisoBase - montoPagado).toFixed(2));
+            nuevoEstado = 'PAGO_PARCIAL';
+          }
         }
 
-        // Registro del pago
+        // 3. Registrar el comprobante en tabla pagos
         const comprobanteRef = `SIRO-${item.clave_cliente}-${item.fecha_pago.replace(/-/g, '')}`;
         const insertPagoQuery = `
           INSERT INTO pagos (
@@ -136,19 +216,16 @@ async findCuotasExigiblesByInmueble(idInmueble: number): Promise<Array<{
         ]);
         const idPago = resPago.rows[0].id_pago;
 
-        // Estado según saldo remanente
-        const nuevoEstado: EstadoCuota = nuevoSaldo <= 0.01 ? 'PAGADA' : 'PAGO_PARCIAL';
-
-        // Actualización atómica de cuota (monto_actualizado NO se toca)
+        // 4. Actualización atómica de la cuota
         await client.query(
           `UPDATE cuotas 
-           SET saldo_remanente = $1, 
-               estado = $2
-           WHERE id_cuota = $3;`,
-          [nuevoSaldo, nuevoEstado, item.id_cuota]
+           SET porcentaje_actualizacion = $1,
+               monto_actualizado = $2,
+               saldo_remanente = $3, 
+               estado = $4
+           WHERE id_cuota = $5;`,
+          [porcentajeFinal, montoActualizadoFinal, nuevoSaldo, nuevoEstado, item.id_cuota]
         );
-
-        // Se eliminó la propagación a períodos futuros para no alterar cuotas subsiguientes
 
         resultados.push({
           id_pago: idPago,
@@ -167,4 +244,30 @@ async findCuotasExigiblesByInmueble(idInmueble: number): Promise<Array<{
       client.release();
     }
   }
+
+  /**
+ * Obtiene el piso base encadenado para una cuota de RED_OBRA
+ */
+async findPisoBaseCuota(idContrato: number, nroCuota: number, montoBaseActual: number): Promise<number> {
+  if (nroCuota <= 1) {
+    return montoBaseActual;
+  }
+
+  const query = `
+    SELECT monto_actualizado 
+    FROM cuotas 
+    WHERE id_contrato = $1 
+      AND concepto = 'RED_OBRA' 
+      AND nro_cuota < $2 
+    ORDER BY nro_cuota DESC 
+    LIMIT 1;
+  `;
+  const res = await pool.query(query, [idContrato, nroCuota]);
+
+  if (res.rows.length > 0 && res.rows[0].monto_actualizado !== null) {
+    return Number(res.rows[0].monto_actualizado);
+  }
+
+  return montoBaseActual;
+}
 }
