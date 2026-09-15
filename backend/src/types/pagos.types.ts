@@ -1,9 +1,13 @@
+import { EstadoCuota } from './contratos.types';
+
 export interface CreatePagoDTO {
   id_cuota: number;
   monto: number;
-  fecha_pago?: string | null; // 'YYYY-MM-DD'
-  medio_pago: 'TRANSFERENCIA' | 'EFECTIVO' | 'CHEQUE' | string;
+  fecha_pago?: string;
+  medio_pago: string;
   comprobante?: string | null;
+  detalle?: string | null;
+  porcentaje_actualizacion?: number | null;
 }
 
 export interface PagoResponseDTO {
@@ -25,11 +29,11 @@ export interface CuotaConPagoDTO {
   periodo: string;
   monto_base: string | number;
   monto_actualizado: string | number;
+  saldo_remanente: string | number;
+  porcentaje_actualizacion: number;
   fecha_vencimiento: string;
-  estado: 'PENDIENTE' | 'PAGADA' | 'VENCIDA';
-  id_pago: number | null;
-  monto: string | number | null;
-  fecha_pago: string | null;
-  medio_pago: string | null;
-  comprobante: string | null;
+  estado: EstadoCuota;
+  total_abonado: string | number;
+  ultima_fecha_pago: string | null;
+  ultimo_comprobante: string | null;
 }

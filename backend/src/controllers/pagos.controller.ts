@@ -5,14 +5,27 @@ const pagosService = new PagosService();
 
 export const createPago = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { id_cuota, monto, fecha_pago, medio_pago, comprobante } = req.body;
+    const { 
+      id_cuota, 
+      monto, 
+      fecha_pago, 
+      medio_pago, 
+      comprobante, 
+      detalle,
+      porcentaje_actualizacion 
+    } = req.body;
 
     const nuevoPago = await pagosService.procesarPago({
-      id_cuota,
-      monto,
+      id_cuota: Number(id_cuota),
+      monto: Number(monto),
       fecha_pago,
       medio_pago,
       comprobante,
+      detalle,
+      porcentaje_actualizacion:
+        porcentaje_actualizacion !== undefined && porcentaje_actualizacion !== null
+          ? Number(porcentaje_actualizacion)
+          : null,
     });
 
     res.status(201).json({

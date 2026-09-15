@@ -16,7 +16,21 @@ export interface CuotaInsertDTO {
   periodo: string; // Formato 'YYYY-MM'
   monto_base: number;
   monto_actualizado: number;
+  saldo_remanente: number; // Inicialmente igual a monto_actualizado al generar el plan
   fecha_vencimiento: string; // Formato 'YYYY-MM-DD'
+  estado: EstadoCuota;
+}
+
+export interface CuotaResponseDTO {
+  id_cuota: number;
+  id_contrato: number;
+  concepto: string;
+  nro_cuota: number;
+  periodo: string;
+  monto_base: string | number;
+  monto_actualizado: string | number; // Valor nominal contractual indexado (inmutable)
+  saldo_remanente: string | number;   // Deuda viva exigible restante (disminuye con pagos)
+  fecha_vencimiento: string;
   estado: EstadoCuota;
 }
 

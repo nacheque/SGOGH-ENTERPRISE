@@ -7,6 +7,7 @@ import indicesRoutes from './indices.routes';
 import contratosRoutes from './contratos.routes';
 import pagosRoutes from './pagos.routes';
 import cuotasRoutes from './cuotas.routes';
+import conciliacionesRoutes from './conciliaciones.routes';
 
 const router = Router();
 
@@ -29,5 +30,8 @@ router.use('/indices', indicesRoutes);
 router.use('/contratos', contratosRoutes);
 router.use('/pagos', pagosRoutes);
 router.use('/cuotas', cuotasRoutes);
+
+// Conciliaciones
+router.use('/conciliaciones', conciliacionesRoutes);
 
 export default router;
