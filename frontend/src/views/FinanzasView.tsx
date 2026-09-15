@@ -4,7 +4,6 @@ import { getObras } from '../api/obras.api';
 import { getInmuebles } from '../api/inmuebles.api';
 import { ResumenObraHeader } from '../components/finanzas/ResumenObraHeader';
 import { CuentaCorrienteTable } from '../components/finanzas/CuentaCorrienteTable';
-//import { LayoutDashboard } from 'lucide-react';
 import { PlanCuotasModal } from '../components/finanzas/PlanCuotasModal';
 import { ObrasView } from './ObrasView';
 import { DashboardKPIs } from '../components/finanzas/DashboardKPIs';
@@ -26,7 +25,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
   const [selectedCuentaModal, setSelectedCuentaModal] = useState<CuentaCorrienteRow | null>(null);
   const [modalRoelaOpen, setModalRoelaOpen] = useState(false);
 
-  // Declarar fetchData afuera para poder reutilizarla
+  // Declarar fetchData para poder reutilizarla tras pagos y conciliaciones
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -66,6 +65,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
 
       return {
         id_inmueble: inm.id_inmueble,
+        id_obra: inm.id_obra, // <-- SOLUCIÓN AL ERROR DE TYPESCRIPT
         id_contrato: inm.id_contrato || null,
         tiene_contrato: tieneContrato,
         clave: inm.clave_cliente,
@@ -101,7 +101,6 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
     <div className="space-y-6">
       {/* Barra de Pestañas Superior */}
       <div className="flex items-center gap-2 border-b border-slate-200 pb-4 mb-6">
-        
         <button
           onClick={() => setActiveTab('dashboard')}
           className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition ${
@@ -112,7 +111,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
         >
           Dashboard de Cobranzas
         </button>
-        
+
         <button
           onClick={() => setActiveTab('cuenta_corriente')}
           className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition ${
@@ -134,8 +133,6 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
         >
           Gestión de Obras
         </button>
-
-        
       </div>
 
       {/* PESTAÑA 1: GESTIÓN DE OBRAS */}
@@ -154,7 +151,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
             onSelectObra={setSelectedObraId}
             totalVecinos={cuentaCorrienteData.length}
           />
-          
+
           {/* BARRA DE ACCIONES DE CUENTA CORRIENTE */}
           <div className="flex items-center justify-end">
             <button
@@ -166,7 +163,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
               Importar Rendición SIRO
             </button>
           </div>
-          
+
           <CuentaCorrienteTable
             data={cuentaCorrienteData}
             loading={loading}
@@ -177,7 +174,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
             isOpen={Boolean(selectedCuentaModal)}
             onClose={() => setSelectedCuentaModal(null)}
             showToast={showToast}
-            onPlanCreado={fetchData} // <-- Vuelve a cargar getInmuebles() y refresca la tabla
+            onPlanCreado={fetchData}
           />
 
           {/* MODAL IMPORTAR ROELA */}
@@ -185,6 +182,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
             isOpen={modalRoelaOpen}
             onClose={() => setModalRoelaOpen(false)}
             showToast={showToast}
+            onSuccess={fetchData} // <-- VINCULADO PARA REFRESCAR LA TABLA AL CONCILIAR
           />
         </div>
       )}

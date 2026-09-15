@@ -163,26 +163,46 @@ export class ConciliacionesService {
         continue;
       }
 
-      // 4. Imputación en Cascada
+      // 4. Imputación en Cascada alineada a Saldo Remanente e Inferencia de Índice
       let saldoDisponible = monto;
 
       for (const cuota of cuotasImpagas) {
         if (saldoDisponible <= 0.009) break;
 
-        const exigible = Number(cuota.monto_actualizado);
+        // Si es PAGO_PARCIAL, la deuda viva es el remanente.
+        // Si está PENDIENTE, determinamos su piso base encadenado dinámico.
+        let deudaExigible = 0;
+        if (cuota.estado === 'PAGO_PARCIAL') {
+          deudaExigible = Number(cuota.saldo_remanente);
+        } else {
+          deudaExigible = await this.repo.findPisoBaseCuota(
+            cuota.id_contrato,
+            Number(cuota.nro_cuota),
+            Number(cuota.monto_base)
+          );
+        }
+
         let montoAplicado = 0;
         let nuevoEstado: 'PAGADA' | 'PAGO_PARCIAL';
         let saldoRemanente = 0;
 
-        if (saldoDisponible >= exigible) {
-          montoAplicado = exigible;
+        // Si la cuota está PENDIENTE y el saldo cubre o supera el piso base (pago indexado o exacto)
+        if (cuota.estado === 'PENDIENTE' && saldoDisponible >= deudaExigible) {
+          montoAplicado = saldoDisponible; 
           nuevoEstado = 'PAGADA';
           saldoRemanente = 0;
-          saldoDisponible = Number((saldoDisponible - exigible).toFixed(2));
+          saldoDisponible = 0;
+        } else if (saldoDisponible >= deudaExigible) {
+          // Si ya estaba en PAGO_PARCIAL y el saldo cubre el remanente
+          montoAplicado = deudaExigible;
+          nuevoEstado = 'PAGADA';
+          saldoRemanente = 0;
+          saldoDisponible = Number((saldoDisponible - deudaExigible).toFixed(2));
         } else {
+          // Pago parcial: no alcanza a cubrir la deuda exigible (piso base o remanente)
           montoAplicado = saldoDisponible;
           nuevoEstado = 'PAGO_PARCIAL';
-          saldoRemanente = Number((exigible - saldoDisponible).toFixed(2));
+          saldoRemanente = Number((deudaExigible - saldoDisponible).toFixed(2));
           saldoDisponible = 0;
         }
 
@@ -197,7 +217,7 @@ export class ConciliacionesService {
           monto: montoAplicado,
           id_cuota: cuota.id_cuota,
           nro_cuota: cuota.nro_cuota,
-          monto_cuota_actual: exigible,
+          monto_cuota_actual: deudaExigible,
           nuevo_estado: nuevoEstado,
           saldo_remanente: saldoRemanente,
           estado_preview: 'LISTO_PARA_IMPUTAR',
@@ -205,6 +225,7 @@ export class ConciliacionesService {
         });
       }
 
+      // Si quedó saldo remanente huérfano después de recorrer todas las cuotas
       if (saldoDisponible > 0.01) {
         conInconsistencias++;
         items.push({

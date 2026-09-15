@@ -34,6 +34,8 @@ export interface PagoConfirmarDTO {
   monto: number;
   fecha_pago: string;
   clave_cliente: string;
+  comprobante?: string | null;
+  detalle?: string | null;
 }
 
 export interface ConfirmarConciliacionDTO {
