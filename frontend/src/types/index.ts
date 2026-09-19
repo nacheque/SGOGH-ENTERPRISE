@@ -60,6 +60,7 @@ export interface CreatePersonaDTO {
 // ==========================================
 export interface Inmueble {
   id_inmueble: number;
+  nombre_obra?: string | null;
   id_obra: number;
   clave_cliente?: string;
   calle: string;

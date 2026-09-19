@@ -7,7 +7,7 @@ import { CuentaCorrienteTable } from '../components/finanzas/CuentaCorrienteTabl
 import { PlanCuotasModal } from '../components/finanzas/PlanCuotasModal';
 import { ObrasView } from './ObrasView';
 import { DashboardKPIs } from '../components/finanzas/DashboardKPIs';
-import { FileSpreadsheet } from 'lucide-react';
+import { FileSpreadsheet, Search, X } from 'lucide-react';
 import { ImportarRoelaModal } from '../components/finanzas/ImportarRoelaModal';
 
 interface Props {
@@ -24,6 +24,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedCuentaModal, setSelectedCuentaModal] = useState<CuentaCorrienteRow | null>(null);
   const [modalRoelaOpen, setModalRoelaOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState<string>('');
 
   // Declarar fetchData para poder reutilizarla tras pagos y conciliaciones
   const fetchData = async () => {
@@ -45,6 +46,8 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  
 
   // Filtrar y calcular la cuenta corriente en base a los inmuebles y contrato real
   const cuentaCorrienteData: CuentaCorrienteRow[] = inmuebles
@@ -96,6 +99,25 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
         cuota_vigente_actual: cuotaBase,
       };
     });
+
+// Filtrado reactivo en memoria exclusivamente para renderizar en la tabla
+  const filteredCuentaCorrienteData = cuentaCorrienteData.filter((row) => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase().trim();
+
+    // Evaluamos todos los campos de texto posibles de forma individual
+    const titular = String(row.titular_nombre || '').toLowerCase();
+    const frentista = String(row.frentista_nombre || '').toLowerCase();
+    const idCliente = String(row.clave || '').toLowerCase();
+    const calle = String(row.calle || '').toLowerCase();
+
+    return (
+      titular.includes(term) ||
+      frentista.includes(term) ||
+      idCliente.includes(term) ||
+      calle.includes(term)
+    );
+  });
 
   return (
     <div className="space-y-6">
@@ -152,12 +174,35 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
             totalVecinos={cuentaCorrienteData.length}
           />
 
-          {/* BARRA DE ACCIONES DE CUENTA CORRIENTE */}
-          <div className="flex items-center justify-end">
+          {/* BARRA DE ACCIONES Y BÚSQUEDA RÁPIDA */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            {/* Buscador en tiempo real */}
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por Titular de Lote o ID-Cliente..."
+                className="w-full pl-9 pr-8 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 shadow-xs transition"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-md transition"
+                  title="Limpiar búsqueda"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Botón Importar Rendición SIRO */}
             <button
               type="button"
               onClick={() => setModalRoelaOpen(true)}
-              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors shrink-0"
             >
               <FileSpreadsheet className="w-4 h-4" />
               Importar Rendición SIRO
@@ -165,7 +210,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
           </div>
 
           <CuentaCorrienteTable
-            data={cuentaCorrienteData}
+            data={filteredCuentaCorrienteData}
             loading={loading}
             onSelectCuenta={setSelectedCuentaModal}
           />

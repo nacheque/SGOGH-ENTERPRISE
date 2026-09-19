@@ -26,9 +26,9 @@ export const CuentaCorrienteTable: React.FC<Props> = ({ data, loading, onSelectC
             <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
               <tr>
                 <th className="px-3 py-3 text-center">PLAN / CUOTAS</th>
-                <th className="px-3 py-3">CLAVE</th>
+                <th className="px-3 py-3">ID-CLAVE</th>
                 <th className="px-3 py-3">MZA</th>
-                <th className="px-3 py-3">FRENTISTA</th>
+                <th className="px-3 py-3">TITULAR DEL LOTE</th>
                 <th className="px-3 py-3 text-right">METROS</th>
                 <th className="px-3 py-3">CALLE</th>
                 <th className="px-3 py-3">Nº</th>

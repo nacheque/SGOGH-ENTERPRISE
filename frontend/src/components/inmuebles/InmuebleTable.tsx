@@ -38,11 +38,11 @@ export const InmuebleTable: React.FC<Props> = ({ inmuebles = [], loading }) => {
           <table className="w-full text-left text-xs text-slate-600 whitespace-nowrap">
             <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
               <tr>
-                <th className="px-4 py-3">Clave Cliente</th>
+                <th className="px-4 py-3">ID-Cliente</th>
                 <th className="px-4 py-3">Obra Asignada</th>
                 <th className="px-4 py-3">Ubicación / Calle</th>
                 <th className="px-4 py-3">Mza / Catastro Mun / Prov</th>
-                <th className="px-4 py-3">Frentista / Titular</th>
+                <th className="px-4 py-3">Titular de Lote / Titular de Servicio</th>
                 <th className="px-4 py-3">Metros Frente</th>
                 <th className="px-4 py-3">Gabinete</th>
               </tr>
@@ -57,7 +57,7 @@ export const InmuebleTable: React.FC<Props> = ({ inmuebles = [], loading }) => {
                     Mza: {inm.manzana || '-'} | Mun: {inm.lote_catast_muni || '-'} | Prov: {inm.lote_catast_provincia || '-'}
                   </td>
                   <td className="px-4 py-3 text-slate-800">
-                    <div>{inm.frentista_nombre || <span className="text-slate-400 italic">Sin frentista</span>}</div>
+                    <div>{inm.frentista_nombre || <span className="text-slate-400 italic">Sin Titular de Servicio</span>}</div>
                     {inm.titular_nombre && inm.titular_nombre !== inm.frentista_nombre && (
                       <div className="text-[10px] text-slate-400 font-normal">Titular: {inm.titular_nombre}</div>
                     )}

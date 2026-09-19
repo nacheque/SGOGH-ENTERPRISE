@@ -280,11 +280,11 @@ export const NuevoInmuebleModal: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* SECCIÓN 2: FRENTISTA */}
+          {/* SECCIÓN 2: TITULAR DEL LOTE */}
           <div className="space-y-3">
             <div className="flex items-center gap-1.5 text-slate-700 font-bold uppercase tracking-wider text-[11px] pb-1 border-b border-slate-100">
               <User className="w-3.5 h-3.5 text-slate-500" />
-              <span>2. Frentista (Ocupante / Poseedor del Lote)</span>
+              <span>2. Titular de Lote (Ocupante / Poseedor)</span>
             </div>
 
             <div>
@@ -312,7 +312,7 @@ export const NuevoInmuebleModal: React.FC<Props> = ({
             {/* Toggle de vinculación */}
             <div className="bg-brand-50/50 p-3 rounded-xl border border-brand-100 flex items-center justify-between">
               <span className="font-semibold text-slate-800">
-                ¿El titular del servicio es el mismo frentista?
+                ¿El titular del servicio es el mismo titular del lote?
               </span>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input

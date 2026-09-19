@@ -369,7 +369,7 @@ export const ImportarRoelaModal: React.FC<Props> = ({
                   <table className="w-full text-left text-xs text-slate-600 border-collapse">
                     <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 sticky top-0 border-b border-slate-200 z-10 shadow-2xs">
                       <tr>
-                        <th className="px-3 py-2.5">Clave / Frentista</th>
+                        <th className="px-3 py-2.5">ID-CLIENTE</th>
                         <th className="px-3 py-2.5">Cuota Imputada</th>
                         <th className="px-3 py-2.5">Fecha Cobro</th>
                         <th className="px-3 py-2.5 text-right">Importe Abonado</th>
