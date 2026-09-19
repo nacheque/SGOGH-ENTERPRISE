@@ -29,12 +29,20 @@ export interface PadronInmuebleDTO {
   conexion_gabinete: boolean;
   gabinete_colocado: boolean;
   observacion: string | null;
+
+  // Datos Frentista
   frentista_nombre: string | null;
   frentista_dni: string | null;
   frentista_cuit: string | null;
   frentista_telefono: string | null;
   frentista_email: string | null;
+
+  // Datos Titular
   titular_nombre: string | null;
   titular_dni: string | null;
   titular_cuit: string | null;
+  titular_telefono?: string | null;
+  titular_email?: string | null;
+  titular_domicilio?: string | null;
+  domicilio_notificacion?: string | null;
 }

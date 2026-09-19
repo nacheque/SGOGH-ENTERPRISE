@@ -19,15 +19,14 @@ export interface CreateObraDTO {
 }
 
 export interface PadronInmuebleDTO {
-  // Inmueble
   id_inmueble: number;
   clave_cliente: string;
   calle: string;
-  numero: string | null;
+  numero: string | number | null;
   manzana: string | null;
   lote_catast_muni: string | null;
   lote_catast_provincia: string | null;
-  metros_frente: string | number;
+  metros_frente: number;
   conexion_gabinete: boolean;
   gabinete_colocado: boolean;
   observacion: string | null;
@@ -43,4 +42,7 @@ export interface PadronInmuebleDTO {
   titular_nombre: string | null;
   titular_dni: string | null;
   titular_cuit: string | null;
+  titular_telefono?: string | null;
+  titular_email?: string | null;
+  titular_domicilio?: string | null;
 }

@@ -89,7 +89,10 @@ export class ObrasRepository {
         -- Datos del Titular
         pt.nombre_completo AS titular_nombre,
         pt.dni AS titular_dni,
-        pt.cuit AS titular_cuit
+        pt.cuit AS titular_cuit,
+        pt.telefono AS titular_telefono,
+        pt.email AS titular_email,
+        pt.domicilio_particular AS titular_domicilio
       FROM inmuebles i
       LEFT JOIN personas pf ON i.id_frentista = pf.id_persona
       LEFT JOIN personas pt ON i.id_titular = pt.id_persona
