@@ -36,6 +36,10 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
       ]);
       setObras(obrasData);
       setInmuebles(inmueblesData);
+
+      if (obrasData && obrasData.length > 0) {
+        setSelectedObraId((prev) => (prev !== null ? prev : obrasData[0].id_obra));
+      }
     } catch (err: any) {
       showToast(err.message, 'error');
     } finally {
@@ -45,6 +49,18 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
 
   useEffect(() => {
     fetchData();
+  }, []);
+
+  useEffect(() => {
+    const handlePadronUpdate = () => {
+      // fetchData recarga todo el listado de cuentas corrientes y planes
+      fetchData();
+    };
+
+    window.addEventListener('padron:actualizado', handlePadronUpdate);
+    return () => {
+      window.removeEventListener('padron:actualizado', handlePadronUpdate);
+    };
   }, []);
 
   

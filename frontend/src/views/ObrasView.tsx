@@ -6,12 +6,14 @@ import {
   ArrowLeft, 
   Search, 
   Calendar, 
-  MapPin 
+  MapPin,
+  FileSpreadsheet 
 } from 'lucide-react';
 import { NuevoInmuebleModal } from '../components/obras/NuevoInmuebleModal';
 import { NuevaObraModal } from '../components/obras/NuevaObraModal';
 import { ObraTable } from '../components/obras/ObraTable';
 import { PadronObraTable } from '../components/obras/PadronObraTable';
+import { ImportarPadronModal } from '../components/obras/ImportarPadronModal';
 
 interface Props {
   showToast: (message: string, type: 'success' | 'error') => void;
@@ -30,6 +32,7 @@ export const ObrasView: React.FC<Props> = ({ showToast }) => {
   // Modales
   const [showAltaModal, setShowAltaModal] = useState(false);
   const [showNuevoInmuebleModal, setShowNuevoInmuebleModal] = useState(false);
+  const [showImportarPadronModal, setShowImportarPadronModal] = useState(false);
 
   const fetchObrasList = async () => {
     try {
@@ -121,7 +124,18 @@ export const ObrasView: React.FC<Props> = ({ showToast }) => {
               </div>
             </div>
 
+            {/* LADO DERECHO: Botones de Acción + Buscador */}
             <div className="flex items-center gap-3">
+              {/* Botón Importar Excel */}
+              <button
+                onClick={() => setShowImportarPadronModal(true)}
+                className="flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs"
+              >
+                <FileSpreadsheet className="w-4 h-4" /> Importar Padrón Excel
+              </button>
+
+
+              {/* Botón Cargar Inmueble Manual */}
               <button
                 onClick={() => setShowNuevoInmuebleModal(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition shadow-xs"
@@ -189,6 +203,21 @@ export const ObrasView: React.FC<Props> = ({ showToast }) => {
           onClose={() => setShowNuevoInmuebleModal(false)}
           onSuccess={handleInmuebleCreadoSuccess}
           showToast={showToast || (() => {})}
+        />
+      )}
+
+      {/* Modal de Importar Padrón */}
+      {obraSeleccionada && (
+        <ImportarPadronModal
+          isOpen={showImportarPadronModal}
+          obraId={obraSeleccionada.id_obra}
+          nombreObra={obraSeleccionada.nombre_obra}
+          onClose={() => setShowImportarPadronModal(false)}
+          onSuccess={() => {
+            // Recarga el padrón principal inmediatamente
+            getPadronByObra(obraSeleccionada.id_obra).then((data) => setPadron(data));
+          }}
+          showToast={showToast}
         />
       )}
     </div>

@@ -53,14 +53,11 @@ export const ResumenObraHeader: React.FC<Props> = ({
 
         <div className="my-2">
           <select
-            value={selectedObraId === null ? 'ALL' : selectedObraId}
-            onChange={(e) => {
-              const val = e.target.value;
-              onSelectObra(val === 'ALL' ? null : Number(val));
-            }}
+            value={selectedObraId ?? ''}
+            onChange={(e) => onSelectObra(Number(e.target.value))}
             className="w-full px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 border border-slate-300 rounded-lg outline-none focus:border-brand-500 focus:bg-white transition"
           >
-            <option value="ALL">-- Todas las obras (Consolidado General) --</option>
+            
             {obras.map((o) => (
               <option key={o.id_obra} value={o.id_obra}>
                 {o.nombre_obra}
