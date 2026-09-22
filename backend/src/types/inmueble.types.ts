@@ -97,3 +97,28 @@ export interface InmuebleCompletoResponseDTO {
   gabinete_colocado: boolean;
   observacion: string | null;
 }
+
+export interface UpdateInmuebleDTO {
+  // Catastro y Lote
+  clave_cliente?: string;
+  manzana?: string;
+  lote_catast_muni?: string;
+  lote_catast_provincia?: string;
+  calle?: string;
+  numero?: string | null;
+  metros_frente?: number;
+  conexion_gabinete?: boolean;
+  gabinete_colocado?: boolean;
+  observacion?: string | null;
+
+  // Personas
+  titular?: PersonaInputDTO;
+  frentista?: PersonaInputDTO;
+  mismo_frentista_que_titular?: boolean;
+}
+
+export interface UpdateInmuebleResponseDTO {
+  ok: boolean;
+  mensaje: string;
+  id_inmueble: number;
+}

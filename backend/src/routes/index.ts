@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { getHealth } from '../controllers/health.controller';
-import { getPersonas, createPersona } from '../controllers/personas.controller';
-import { getInmuebles, createInmueble } from '../controllers/inmuebles.controller';
+import personasRoutes from './personas.routes';
+import inmueblesRoutes from './inmuebles.routes';
 import obrasRoutes from './obras.routes';
 import indicesRoutes from './indices.routes';
 import contratosRoutes from './contratos.routes';
@@ -18,12 +18,10 @@ router.get('/health', getHealth);
 router.use('/obras', obrasRoutes);
 
 // Módulo Personas
-router.get('/personas', getPersonas);
-router.post('/personas', createPersona);
+router.use('/personas', personasRoutes);
 
 // Módulo Inmuebles (CRUD individual)
-router.get('/inmuebles', getInmuebles);
-router.post('/inmuebles', createInmueble);
+router.use('/inmuebles', inmueblesRoutes);
 
 // Índices, Contratos, Pagos y Cuotas
 router.use('/indices', indicesRoutes);

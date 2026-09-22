@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { InmueblesRepository } from '../repositories/inmuebles.repository';
+import { InmueblesRepository, AppError } from '../repositories/inmuebles.repository';
 import { InmueblesService } from '../services/inmuebles.service';
+import { CreateInmuebleDTO, CreateInmuebleConPersonasDTO, UpdateInmuebleDTO } from '../types/inmueble.types';
 
 const inmueblesRepo = new InmueblesRepository();
 
@@ -94,5 +95,72 @@ export const createInmuebleConPersonas = async (req: Request, res: Response, nex
       });
     }
     next(error);
+  }
+};
+
+export const updateInmueble = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const idParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const idInmueble = parseInt(idParam, 10);
+
+    if (isNaN(idInmueble) || idInmueble <= 0) {
+      res.status(400).json({
+        status: 'error',
+        message: 'El ID del inmueble provisto es inválido.',
+      });
+      return;
+    }
+
+    const body: UpdateInmuebleDTO = req.body;
+
+    // Validación defensiva de números negativos en metros
+    if (body.metros_frente !== undefined && body.metros_frente <= 0) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Los metros de frente deben ser un valor mayor a cero.',
+      });
+      return;
+    }
+
+    // Validación de nombres en caso de proveer titulares
+    if (body.titular && (!body.titular.nombre_completo || body.titular.nombre_completo.trim() === '')) {
+      res.status(400).json({
+        status: 'error',
+        message: 'El nombre completo del titular es obligatorio si se envía el objeto titular.',
+      });
+      return;
+    }
+
+    if (
+      !body.mismo_frentista_que_titular &&
+      body.frentista &&
+      (!body.frentista.nombre_completo || body.frentista.nombre_completo.trim() === '')
+    ) {
+      res.status(400).json({
+        status: 'error',
+        message: 'El nombre completo del frentista es obligatorio si se envía un frentista diferenciado.',
+      });
+      return;
+    }
+
+    const result = await inmueblesRepo.updateInmueble(idInmueble, body);
+
+    res.status(200).json({
+      status: 'success',
+      data: result,
+    });
+  } catch (err: any) {
+    if (err instanceof AppError) {
+      res.status(err.statusCode).json({
+        status: 'error',
+        message: err.message,
+      });
+      return;
+    }
+    next(err);
   }
 };
