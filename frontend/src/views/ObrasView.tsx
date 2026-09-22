@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import type { ObraDTO, PadronInmuebleDTO } from '../types/obras.types';
+import type { Obra, PadronInmuebleDTO } from '../types';
 import { getObras, getPadronByObra } from '../api/obrasRediseño.api';
 import { 
   Plus, 
@@ -20,9 +20,9 @@ interface Props {
 }
 
 export const ObrasView: React.FC<Props> = ({ showToast }) => {
-  const [obras, setObras] = useState<ObraDTO[]>([]);
+  const [obras, setObras] = useState<Obra[]>([]);
   const [loadingObras, setLoadingObras] = useState(false);
-  const [obraSeleccionada, setObraSeleccionada] = useState<ObraDTO | null>(null);
+  const [obraSeleccionada, setObraSeleccionada] = useState<Obra | null>(null);
 
   // Detalle: Padrón
   const [padron, setPadron] = useState<PadronInmuebleDTO[]>([]);
@@ -50,7 +50,7 @@ export const ObrasView: React.FC<Props> = ({ showToast }) => {
     fetchObrasList();
   }, []);
 
-  const handleSeleccionarObra = async (obra: ObraDTO) => {
+  const handleSeleccionarObra = async (obra: Obra) => {
     setObraSeleccionada(obra);
     setFiltroPadron('');
     try {
@@ -64,7 +64,7 @@ export const ObrasView: React.FC<Props> = ({ showToast }) => {
     }
   };
 
-  const handleInmuebleCreadoSuccess = () => {
+  const handleRecargarPadron = () => {
     if (obraSeleccionada) {
       getPadronByObra(obraSeleccionada.id_obra).then((data) => setPadron(data));
     }
@@ -96,7 +96,7 @@ export const ObrasView: React.FC<Props> = ({ showToast }) => {
             <div className="flex items-center gap-4">
               <button
                 onClick={() => setObraSeleccionada(null)}
-                className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition shadow-xs"
+                className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4" /> Volver a Obras
               </button>
@@ -108,12 +108,16 @@ export const ObrasView: React.FC<Props> = ({ showToast }) => {
                   </span>
                 </div>
                 <div className="flex items-center gap-4 mt-1 text-xs text-slate-500 font-medium">
-                  <span className="flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400" /> {obraSeleccionada.ubicacion}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" /> Período: {obraSeleccionada.anio}
-                  </span>
+                  {obraSeleccionada.descripcion && (
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400" /> {obraSeleccionada.descripcion}
+                    </span>
+                  )}
+                  {obraSeleccionada.fecha_inicio && (
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-slate-400" /> Período: {new Date(obraSeleccionada.fecha_inicio).getFullYear()}
+                    </span>
+                  )}
                   <span>
                     Precio/m: <strong>${Number(obraSeleccionada.precio_x_metro).toLocaleString('es-AR')}</strong>
                   </span>
@@ -129,16 +133,15 @@ export const ObrasView: React.FC<Props> = ({ showToast }) => {
               {/* Botón Importar Excel */}
               <button
                 onClick={() => setShowImportarPadronModal(true)}
-                className="flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs"
+                className="flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
               >
                 <FileSpreadsheet className="w-4 h-4" /> Importar Padrón Excel
               </button>
 
-
               {/* Botón Cargar Inmueble Manual */}
               <button
                 onClick={() => setShowNuevoInmuebleModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition shadow-xs"
+                className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
               >
                 <Plus className="w-4 h-4" /> Cargar Inmueble al Padrón
               </button>
@@ -156,8 +159,14 @@ export const ObrasView: React.FC<Props> = ({ showToast }) => {
             </div>
           </div>
 
-          {/* Tabla Padrón */}
-          <PadronObraTable padron={padronFiltrado} loading={loadingPadron} />
+          {/* Tabla Padrón (Con soporte para Edición) */}
+          <PadronObraTable 
+            padron={padronFiltrado} 
+            loading={loadingPadron} 
+            obraId={obraSeleccionada.id_obra}
+            onRefresh={handleRecargarPadron}
+            showToast={showToast}
+          />
         </div>
       ) : (
         /* ========================================================= */
@@ -173,7 +182,7 @@ export const ObrasView: React.FC<Props> = ({ showToast }) => {
             </div>
             <button
               onClick={() => setShowAltaModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition shadow-xs"
+              className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
             >
               <Plus className="w-4 h-4" /> Nueva Obra
             </button>
@@ -201,7 +210,7 @@ export const ObrasView: React.FC<Props> = ({ showToast }) => {
           isOpen={showNuevoInmuebleModal}
           idObra={obraSeleccionada.id_obra}
           onClose={() => setShowNuevoInmuebleModal(false)}
-          onSuccess={handleInmuebleCreadoSuccess}
+          onSuccess={handleRecargarPadron}
           showToast={showToast || (() => {})}
         />
       )}
@@ -213,10 +222,7 @@ export const ObrasView: React.FC<Props> = ({ showToast }) => {
           obraId={obraSeleccionada.id_obra}
           nombreObra={obraSeleccionada.nombre_obra}
           onClose={() => setShowImportarPadronModal(false)}
-          onSuccess={() => {
-            // Recarga el padrón principal inmediatamente
-            getPadronByObra(obraSeleccionada.id_obra).then((data) => setPadron(data));
-          }}
+          onSuccess={handleRecargarPadron}
           showToast={showToast}
         />
       )}
