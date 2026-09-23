@@ -7,8 +7,9 @@ import { CuentaCorrienteTable } from '../components/finanzas/CuentaCorrienteTabl
 import { PlanCuotasModal } from '../components/finanzas/PlanCuotasModal';
 import { ObrasView } from './ObrasView';
 import { DashboardKPIs } from '../components/finanzas/DashboardKPIs';
-import { FileSpreadsheet, Search, X } from 'lucide-react';
+import { FileSpreadsheet, Search, X, PlusCircle } from 'lucide-react';
 import { ImportarRoelaModal } from '../components/finanzas/ImportarRoelaModal';
+import {ImportarPlanesModal} from '../components/finanzas/ImportarPlanesModal';
 
 interface Props {
   showToast: (msg: string, type: 'success' | 'error') => void;
@@ -25,6 +26,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
   const [selectedCuentaModal, setSelectedCuentaModal] = useState<CuentaCorrienteRow | null>(null);
   const [modalRoelaOpen, setModalRoelaOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [modalImportarPlanesOpen, setModalImportarPlanesOpen] = useState(false);
 
   // Declarar fetchData para poder reutilizarla tras pagos y conciliaciones
   const fetchData = async () => {
@@ -214,15 +216,33 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
               )}
             </div>
 
-            {/* Botón Importar Rendición SIRO */}
-            <button
-              type="button"
-              onClick={() => setModalRoelaOpen(true)}
-              className="inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors shrink-0"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              Importar Rendición SIRO
-            </button>
+            {/* ... */}
+            <div className="flex items-center gap-2">
+              {/* BOTÓN NUEVO: IMPORTAR PLANES DE PAGO */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!selectedObraId) {
+                    showToast('Debe seleccionar una obra para importar planes', 'error');
+                    return;
+                  }
+                  setModalImportarPlanesOpen(true);
+                }}
+                className="inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 rounded-xl transition shadow-xs cursor-pointer"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Importar Planes Masivos
+              </button>
+
+              {/* Botón Importar Rendición SIRO existente */}
+              <button
+                type="button"
+                onClick={() => setModalRoelaOpen(true)}
+                className="inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition shadow-xs cursor-pointer"              >
+                <FileSpreadsheet className="w-4 h-4 text-white" />
+                Importar Rendición SIRO
+              </button>
+            </div>
           </div>
 
           <CuentaCorrienteTable
@@ -245,6 +265,18 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
             showToast={showToast}
             onSuccess={fetchData} // <-- VINCULADO PARA REFRESCAR LA TABLA AL CONCILIAR
           />
+
+          {/* 4. MODAL IMPORTADOR DE PLANES */}
+          {selectedObraId && (
+            <ImportarPlanesModal
+              isOpen={modalImportarPlanesOpen}
+              obraId={selectedObraId}
+              nombreObra={obras.find((o) => o.id_obra === selectedObraId)?.nombre_obra}
+              onClose={() => setModalImportarPlanesOpen(false)}
+              onSuccess={fetchData}
+              showToast={showToast}
+            />
+          )}
         </div>
       )}
 

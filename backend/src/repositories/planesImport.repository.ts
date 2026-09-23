@@ -68,12 +68,31 @@ export class PlanesImportRepository {
       for (const fila of filas) {
         // 1. Bloqueo pesimista y verificación de pertenencia a la obra
         const { rows: inmRows } = await client.query(
-          `SELECT id_inmueble FROM inmuebles WHERE id_inmueble = $1 AND id_obra = $2 FOR UPDATE;`,
+          `SELECT id_inmueble, conexion_gabinete 
+            FROM inmuebles 
+            WHERE id_inmueble = $1 AND id_obra = $2 
+            FOR UPDATE;`,
           [fila.id_inmueble, idObra]
         );
 
         if (inmRows.length === 0) {
           throw new Error(`El inmueble con ID ${fila.id_inmueble} no pertenece a la obra o no existe.`);
+        }
+
+        const inm = inmRows[0];
+        const tieneConexionGabinete = Boolean(inm.conexion_gabinete);
+        const cuotasGabinete = Number(fila.plan_cuotas_gabinete) || 0;
+
+        if (tieneConexionGabinete && cuotasGabinete <= 0) {
+          throw new Error(
+            `Inmueble clave ${fila.clave_cliente}: Requiere conexión a gabinete: las cuotas de gabinete deben ser al menos 1.`
+          );
+        }
+
+        if (!tieneConexionGabinete && cuotasGabinete > 0) {
+          throw new Error(
+            `Inmueble clave ${fila.clave_cliente}: El inmueble no posee conexión a gabinete configurada en el padrón.`
+          );
         }
 
         // 2. Control anti-concurrencia de contrato

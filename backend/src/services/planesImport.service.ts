@@ -208,6 +208,15 @@ export class PlanesImportService {
       if (montoAnticipo < 0) errores.push('El anticipo no puede ser negativo.');
       if (!fechaInicioStr) errores.push('Fecha de primer vencimiento inválida o vacía.');
 
+      // Regla de Negocio: Coherencia Catastral vs Cuotas de Gabinete
+      const tieneConexionGabinete = Boolean(inm.conexion_gabinete);
+
+      if (tieneConexionGabinete && planCuotasGabinete <= 0) {
+        errores.push('Requiere conexión a gabinete: las cuotas de gabinete deben ser al menos 1.');
+      } else if (!tieneConexionGabinete && planCuotasGabinete > 0) {
+        errores.push('El inmueble no posee conexión a gabinete configurada en el padrón.');
+      }
+
       if (errores.length > 0) {
         items.push({
           fila_excel: filaExcel,
