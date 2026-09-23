@@ -26,7 +26,7 @@ export const CuentaCorrienteTable: React.FC<Props> = ({ data, loading, onSelectC
             <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
               <tr>
                 <th className="px-3 py-3 text-center">PLAN / CUOTAS</th>
-                <th className="px-3 py-3">ID-CLAVE</th>
+                <th className="px-3 py-3">ID-CLIENTE</th>
                 <th className="px-3 py-3">MZA</th>
                 <th className="px-3 py-3">TITULAR DEL LOTE</th>
                 <th className="px-3 py-3 text-right">METROS</th>
@@ -61,7 +61,7 @@ export const CuentaCorrienteTable: React.FC<Props> = ({ data, loading, onSelectC
                     </button>
                   </td>
 
-                  {/* Columna CLAVE */}
+                  {/* Columna ID-CLIENTE */}
                   <td className="px-3 py-2.5 font-mono font-semibold text-slate-900">
                     {row.clave || '-'}
                   </td>
