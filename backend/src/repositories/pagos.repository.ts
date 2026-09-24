@@ -1,6 +1,6 @@
 import { pool } from '../config/database';
 import { PoolClient } from 'pg';
-import { CreatePagoDTO, PagoResponseDTO, CuotaConPagoDTO } from '../types/pagos.types';
+import { CreatePagoDTO, PagoResponseDTO, CuotaConPagoDTO, ChequeCarteraDTO } from '../types/pagos.types';
 import { EstadoCuota } from '../types/contratos.types';
 
 export class PagosRepository {
@@ -120,18 +120,30 @@ export class PagosRepository {
           monto,
           fecha_pago,
           medio_pago,
-          comprobante
-        )
-        VALUES ($1, $2, $3, $4, $5)
+          comprobante,
+          numero_cheque,
+          banco_emisor,
+          cuit_librador,
+          fecha_emision,
+          fecha_cobro
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING *;
       `;
-      const pagoRes = await client.query(insertPagoQuery, [
-        data.id_cuota,
-        montoAPagar,
-        fechaPagoFinal,
-        data.medio_pago || 'TRANSFERENCIA',
-        data.comprobante ?? null,
-      ]);
+
+      const values = [
+        data.id_cuota,               // $1
+        montoAPagar,                 // $2
+        fechaPagoFinal,              // $3
+        data.medio_pago,             // $4
+        data.comprobante ?? null,    // $5
+        data.numero_cheque ?? null,  // $6
+        data.banco_emisor ?? null,   // $7
+        data.cuit_librador ?? null,  // $8
+        data.fecha_emision ?? null,  // $9
+        data.fecha_cobro ?? null,    // $10
+      ];
+
+      const pagoRes = await client.query(insertPagoQuery, values);
 
       // 5. Determinar estado y actualizar cuota
       const nuevoEstado: EstadoCuota = nuevoSaldo <= 0.01 ? 'PAGADA' : 'PAGO_PARCIAL';
@@ -303,5 +315,70 @@ export class PagosRepository {
     `;
     const result = await pool.query(query, [id_inmueble]);
     return result.rows;
+  }
+
+ async listarCarteraCheques(idObra?: number | null, estadoCustodia?: string | null): Promise<ChequeCarteraDTO[]> {
+    let query = `
+      SELECT 
+        p.id_pago,
+        p.id_cuota,
+        p.monto::float AS monto,
+        TO_CHAR(p.fecha_pago, 'YYYY-MM-DD') AS fecha_pago,
+        p.medio_pago,
+        p.numero_cheque,
+        p.banco_emisor,
+        p.cuit_librador,
+        TO_CHAR(p.fecha_emision, 'YYYY-MM-DD') AS fecha_emision,
+        TO_CHAR(p.fecha_cobro, 'YYYY-MM-DD') AS fecha_cobro,
+        p.comprobante,
+        c.nro_cuota,
+        c.concepto,
+        i.id_inmueble,
+        i.clave_cliente,
+        i.calle,
+        i.numero,
+        i.manzana,
+        i.lote_catast_muni AS lote,
+        i.lote_catast_muni,
+        i.lote_catast_provincia,
+        o.id_obra,
+        o.nombre_obra AS obra_nombre,
+        per.nombre_completo AS titular_nombre,
+        per.cuit AS titular_cuit,
+        CASE 
+          WHEN p.fecha_cobro > CURRENT_DATE THEN 'EN_CARTERA'
+          WHEN CURRENT_DATE <= (p.fecha_cobro + INTERVAL '30 days') THEN 'DISPONIBLE'
+          ELSE 'VENCIDO'
+        END AS estado_custodia,
+        (p.fecha_cobro - CURRENT_DATE)::int AS dias_para_cobro
+      FROM pagos p
+      JOIN cuotas c ON c.id_cuota = p.id_cuota
+      JOIN contratos con ON con.id_contrato = c.id_contrato
+      JOIN inmuebles i ON i.id_inmueble = con.id_inmueble
+      JOIN obras o ON o.id_obra = i.id_obra
+      LEFT JOIN personas per ON per.id_persona = i.id_titular
+      WHERE p.medio_pago IN ('CHEQUE', 'ECHEQ')
+        AND ($1::int IS NULL OR o.id_obra = $1)
+    `;
+
+    const params: any[] = [idObra || null];
+
+    if (estadoCustodia && estadoCustodia !== 'TODOS') {
+      params.push(estadoCustodia);
+      query += `
+        AND (
+          CASE 
+            WHEN p.fecha_cobro > CURRENT_DATE THEN 'EN_CARTERA'
+            WHEN CURRENT_DATE <= (p.fecha_cobro + INTERVAL '30 days') THEN 'DISPONIBLE'
+            ELSE 'VENCIDO'
+          END
+        ) = $${params.length}
+      `;
+    }
+
+    query += ` ORDER BY p.fecha_cobro ASC, p.id_pago ASC;`;
+
+    const { rows } = await pool.query(query, params);
+    return rows;
   }
 }
