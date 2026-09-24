@@ -40,6 +40,7 @@ export interface PagoResponseDTO {
   fecha_pago: string;
   medio_pago: string;
   comprobante: string | null;
+  observaciones?: string | null;
 }
 
 export interface CuotaConPagoDTO extends Cuota {
