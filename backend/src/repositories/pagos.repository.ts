@@ -258,15 +258,28 @@ export class PagosRepository {
         c.concepto,
         c.nro_cuota,
         c.periodo,
-        c.monto_base,
-        c.monto_actualizado,
-        c.saldo_remanente,
+        c.monto_base::float AS monto_base,
+        c.monto_actualizado::float AS monto_actualizado,
+        c.saldo_remanente::float AS saldo_remanente,
         CAST(COALESCE(c.porcentaje_actualizacion, 0.00) AS FLOAT) AS porcentaje_actualizacion,
-        c.fecha_vencimiento,
+        TO_CHAR(c.fecha_vencimiento, 'YYYY-MM-DD') AS fecha_vencimiento,
         c.estado,
-        COALESCE(SUM(p.monto), 0) AS total_abonado,
-        MAX(p.fecha_pago) AS ultima_fecha_pago,
-        MAX(p.comprobante) AS ultimo_comprobante
+        COALESCE(SUM(p.monto), 0)::float AS total_abonado,
+        MAX(TO_CHAR(p.fecha_pago, 'YYYY-MM-DD')) AS ultima_fecha_pago,
+        MAX(p.comprobante) AS ultimo_comprobante,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id_pago', p.id_pago,
+              'id_cuota', p.id_cuota,
+              'monto', p.monto::float,
+              'fecha_pago', TO_CHAR(p.fecha_pago, 'YYYY-MM-DD'),
+              'medio_pago', p.medio_pago,
+              'comprobante', p.comprobante
+            ) ORDER BY p.fecha_pago ASC, p.id_pago ASC
+          ) FILTER (WHERE p.id_pago IS NOT NULL),
+          '[]'::json
+        ) AS pagos
       FROM cuotas c
       INNER JOIN contratos ct ON c.id_contrato = ct.id_contrato
       INNER JOIN inmuebles i ON ct.id_inmueble = i.id_inmueble
@@ -277,7 +290,15 @@ export class PagosRepository {
         c.id_contrato, 
         ct.id_inmueble, 
         i.clave_cliente,
-        c.saldo_remanente
+        c.concepto,
+        c.nro_cuota,
+        c.periodo,
+        c.monto_base,
+        c.monto_actualizado,
+        c.saldo_remanente,
+        c.porcentaje_actualizacion,
+        c.fecha_vencimiento,
+        c.estado
       ORDER BY c.fecha_vencimiento ASC, c.concepto ASC;
     `;
     const result = await pool.query(query, [id_inmueble]);

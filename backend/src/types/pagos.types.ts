@@ -36,4 +36,5 @@ export interface CuotaConPagoDTO {
   total_abonado: string | number;
   ultima_fecha_pago: string | null;
   ultimo_comprobante: string | null;
+  pagos: PagoResponseDTO[];
 }
