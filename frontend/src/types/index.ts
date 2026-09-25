@@ -6,3 +6,4 @@ export * from './finanzas.types';
 export * from './cuotas.types';
 export * from './padronImport.types';
 export * from './planesImport.types';
+export * from './dashboard.types';

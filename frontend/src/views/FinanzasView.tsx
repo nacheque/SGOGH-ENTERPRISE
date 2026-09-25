@@ -1,16 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import type { Obra, Inmueble, CuentaCorrienteRow } from '../types';
+import type {
+  Obra,
+  Inmueble,
+  CuentaCorrienteRow,
+  CurvaRecaudacionItemDTO,
+  AgingMoraResponseDTO,
+} from '../types';
 import { getObras } from '../api/obras.api';
 import { getInmuebles } from '../api/inmuebles.api';
+import { dashboardService } from '../api/dashboard.api';
 import { ResumenObraHeader } from '../components/finanzas/ResumenObraHeader';
 import { CuentaCorrienteTable } from '../components/finanzas/CuentaCorrienteTable';
 import { CarteraChequesTable } from '../components/finanzas/CarteraChequesTable';
 import { PlanCuotasModal } from '../components/finanzas/PlanCuotasModal';
 import { ObrasView } from './ObrasView';
 import { DashboardKPIs } from '../components/finanzas/DashboardKPIs';
-import { FileSpreadsheet, Search, X} from 'lucide-react';
+import { CurvaRecaudacionChart } from '../components/finanzas/GraficosDashboard/CurvaRecaudacionChart';
+import { AgingMoraReport } from '../components/finanzas/GraficosDashboard/AgingMoraReport';
+import { FileSpreadsheet, Search, X } from 'lucide-react';
 import { ImportarRoelaModal } from '../components/finanzas/ImportarRoelaModal';
-import {ImportarPlanesModal} from '../components/finanzas/ImportarPlanesModal';
+import { ImportarPlanesModal } from '../components/finanzas/ImportarPlanesModal';
 
 interface Props {
   showToast: (msg: string, type: 'success' | 'error') => void;
@@ -30,7 +39,12 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
   const [modalImportarPlanesOpen, setModalImportarPlanesOpen] = useState(false);
   const [subTabFinanzas, setSubTabFinanzas] = useState<'PADRON' | 'CHEQUES'>('PADRON');
 
-  // Declarar fetchData para poder reutilizarla tras pagos y conciliaciones
+  // Estados analíticos para los gráficos del Dashboard
+  const [curvaData, setCurvaData] = useState<CurvaRecaudacionItemDTO[]>([]);
+  const [agingData, setAgingData] = useState<AgingMoraResponseDTO | null>(null);
+  const [loadingCharts, setLoadingCharts] = useState<boolean>(false);
+
+  // Declarar fetchData para recargar el padrón de cuentas corrientes y planes
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -57,7 +71,6 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
 
   useEffect(() => {
     const handlePadronUpdate = () => {
-      // fetchData recarga todo el listado de cuentas corrientes y planes
       fetchData();
     };
 
@@ -67,7 +80,39 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
     };
   }, []);
 
-  
+  // Fetch reactivo de gráficos analíticos cuando se ingresa a Dashboard o cambia de Obra
+  useEffect(() => {
+    if (activeTab === 'dashboard') {
+      let isMounted = true;
+
+      const fetchDashboardCharts = async () => {
+        try {
+          setLoadingCharts(true);
+          const [curva, aging] = await Promise.all([
+            dashboardService.getCurvaRecaudacion(selectedObraId),
+            dashboardService.getAgingMora(selectedObraId),
+          ]);
+
+          if (isMounted) {
+            setCurvaData(curva);
+            setAgingData(aging);
+          }
+        } catch {
+          if (isMounted) {
+            setCurvaData([]);
+            setAgingData(null);
+          }
+        } finally {
+          if (isMounted) setLoadingCharts(false);
+        }
+      };
+
+      fetchDashboardCharts();
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [activeTab, selectedObraId]);
 
   // Filtrar y calcular la cuenta corriente en base a los inmuebles y contrato real
   const cuentaCorrienteData: CuentaCorrienteRow[] = inmuebles
@@ -77,7 +122,10 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
       const precioMetro = Number(obraAsociada?.precio_x_metro || 0);
       const metrosFrente = Number(inm.metros_frente || 0);
       const costoObra = metrosFrente * precioMetro;
-      const servDom = inm.conexion_gabinete ? Number(obraAsociada?.costo_gabinete || 300000) : 0;
+      
+      // Corrección [BUG-FRONT-01]: Solo calcular servDom si tiene conexión de gabinete activa
+      const tieneGabinete = Boolean(inm.conexion_gabinete);
+      const servDom = tieneGabinete ? Number(obraAsociada?.costo_gabinete || 300000) : 0;
       const costoTotal = costoObra + servDom;
 
       // Lectura del Contrato Real
@@ -88,7 +136,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
 
       return {
         id_inmueble: inm.id_inmueble,
-        id_obra: inm.id_obra, // <-- SOLUCIÓN AL ERROR DE TYPESCRIPT
+        id_obra: inm.id_obra,
         id_contrato: inm.id_contrato || null,
         tiene_contrato: tieneContrato,
         clave: inm.clave_cliente,
@@ -101,7 +149,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
         lote_catast_muni: inm.lote_catast_muni || null,
         lote_catast_provincia: inm.lote_catast_provincia || null,
         observacion: inm.observacion || null,
-        conexion_gabinete: Boolean(inm.conexion_gabinete),
+        conexion_gabinete: tieneGabinete,
         gabinete_colocado: Boolean(inm.gabinete_colocado),
         dni: inm.titular_dni || null,
         cuil: null,
@@ -120,12 +168,11 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
       };
     });
 
-// Filtrado reactivo en memoria exclusivamente para renderizar en la tabla
+  // Filtrado reactivo en memoria exclusivamente para renderizar en la tabla
   const filteredCuentaCorrienteData = cuentaCorrienteData.filter((row) => {
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase().trim();
 
-    // Evaluamos todos los campos de texto posibles de forma individual
     const titular = String(row.titular_nombre || '').toLowerCase();
     const frentista = String(row.frentista_nombre || '').toLowerCase();
     const idCliente = String(row.clave || '').toLowerCase();
@@ -145,7 +192,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
       <div className="flex items-center gap-2 border-b border-slate-200 pb-4 mb-6">
         <button
           onClick={() => setActiveTab('dashboard')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer ${
             activeTab === 'dashboard'
               ? 'bg-brand-600 text-white shadow-sm'
               : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
@@ -156,7 +203,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
 
         <button
           onClick={() => setActiveTab('cuenta_corriente')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer ${
             activeTab === 'cuenta_corriente'
               ? 'bg-brand-600 text-white shadow-sm'
               : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
@@ -167,7 +214,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
 
         <button
           onClick={() => setActiveTab('gestion_obras')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer ${
             activeTab === 'gestion_obras'
               ? 'bg-brand-600 text-white shadow-sm'
               : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
@@ -226,7 +273,6 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
             <div className="space-y-4">
               {/* BARRA DE ACCIONES Y BÚSQUEDA RÁPIDA (PADRÓN) */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                {/* Buscador en tiempo real */}
                 <div className="relative flex-1 max-w-md">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
@@ -248,7 +294,6 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
                   )}
                 </div>
 
-                {/* Botonera de Importación */}
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -317,10 +362,25 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
         </div>
       )}
 
-      {/* PESTAÑA 3: DASHBOARD */}
+      {/* PESTAÑA 3: DASHBOARD GERENCIAL */}
       {activeTab === 'dashboard' && (
-        <div className="animate-in fade-in duration-200">
-          <DashboardKPIs />
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Header con Selector de Obra para el Dashboard */}
+          <ResumenObraHeader
+            obras={obras}
+            selectedObraId={selectedObraId}
+            onSelectObra={setSelectedObraId}
+            totalVecinos={cuentaCorrienteData.length}
+          />
+
+          {/* 6 Tarjetas de KPIs Analíticos */}
+          <DashboardKPIs selectedObraId={selectedObraId} />
+
+          {/* Gráficos Analíticos: Curva de Recaudación y Reporte de Mora */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <CurvaRecaudacionChart data={curvaData} loading={loadingCharts} />
+            <AgingMoraReport data={agingData} loading={loadingCharts} />
+          </div>
         </div>
       )}
     </div>

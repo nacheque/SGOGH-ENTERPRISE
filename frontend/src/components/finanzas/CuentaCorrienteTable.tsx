@@ -47,145 +47,160 @@ export const CuentaCorrienteTable: React.FC<Props> = ({ data, loading, onSelectC
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-normal">
-              {data.map((row) => (
-                <tr key={row.id_inmueble} className="hover:bg-slate-50/70 transition">
+              {data.map((row) => {
+                // Validación defensiva de Gabinete [BUG-FRONT-01]
+                const tieneGabinete = Boolean(row.conexion_gabinete);
+                const costoObraNum = Number(row.costo_obra || 0);
+                const servDomNum = tieneGabinete ? Number(row.serv_dom || 0) : 0;
+                // Si no tiene gabinete, el costo total es únicamente el costo de la obra
+                const costoTotalReal = tieneGabinete
+                  ? (Number(row.costo_total) || (costoObraNum + servDomNum))
+                  : costoObraNum;
 
-                  {/* Columna PLAN / CUOTAS (Acción Modal) */}
-                  <td className="px-3 py-2.5 text-center">
-                    <button
-                      onClick={() => onSelectCuenta(row)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-brand-50 hover:bg-brand-600 hover:text-white text-brand-700 rounded-md text-[11px] font-bold border border-brand-200 transition shadow-xs"
-                      title="Ver Plan de Cuotas"
-                    >
-                      <Receipt className="w-3.5 h-3.5" /> Plan / Cuotas
-                    </button>
-                  </td>
+                return (
+                  <tr key={row.id_inmueble} className="hover:bg-slate-50/70 transition">
 
-                  {/* Columna ID-CLIENTE */}
-                  <td className="px-3 py-2.5 font-mono font-semibold text-slate-900">
-                    {row.clave || '-'}
-                  </td>
+                    {/* Columna PLAN / CUOTAS (Acción Modal) */}
+                    <td className="px-3 py-2.5 text-center">
+                      <button
+                        onClick={() => onSelectCuenta(row)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-brand-50 hover:bg-brand-600 hover:text-white text-brand-700 rounded-md text-[11px] font-bold border border-brand-200 transition shadow-xs cursor-pointer"
+                        title="Ver Plan de Cuotas"
+                      >
+                        <Receipt className="w-3.5 h-3.5" /> Plan / Cuotas
+                      </button>
+                    </td>
 
-                  {/* Columna MZA */}
-                  <td className="px-3 py-2.5 font-mono text-slate-500">
-                    {row.mza || '-'}
-                  </td>
+                    {/* Columna ID-CLIENTE */}
+                    <td className="px-3 py-2.5 font-mono font-semibold text-slate-900">
+                      {row.clave || '-'}
+                    </td>
 
-                  {/* Columna FRENTISTA */}
-                  <td className="px-3 py-2.5 font-medium text-slate-800">
-                    {row.frentista_nombre || <span className="text-slate-400 italic">Sin frentista</span>}
-                  </td>
+                    {/* Columna MZA */}
+                    <td className="px-3 py-2.5 font-mono text-slate-500">
+                      {row.mza || '-'}
+                    </td>
 
-                  {/* Columna METROS */}
-                  <td className="px-3 py-2.5 font-mono text-right">
-                    {row.metros_frente.toFixed(2)} m
-                  </td>
+                    {/* Columna FRENTISTA */}
+                    <td className="px-3 py-2.5 font-medium text-slate-800">
+                      {row.frentista_nombre || <span className="text-slate-400 italic">Sin frentista</span>}
+                    </td>
 
-                  {/* Columna CALLE */}
-                  <td className="px-3 py-2.5 text-slate-700">
-                    {row.calle}
-                  </td>
+                    {/* Columna METROS */}
+                    <td className="px-3 py-2.5 font-mono text-right">
+                      {Number(row.metros_frente || 0).toFixed(2)} m
+                    </td>
 
-                  {/* Columna Nº */}
-                  <td className="px-3 py-2.5 text-slate-600">
-                    {row.numero || 'S/N'}
-                  </td>
+                    {/* Columna CALLE */}
+                    <td className="px-3 py-2.5 text-slate-700">
+                      {row.calle}
+                    </td>
 
-                  {/* Columna LOTE CATAST. MUN */}
-                  <td className="px-3 py-2.5 font-mono text-slate-500">
-                    {row.lote_catast_muni || '-'}
-                  </td>
+                    {/* Columna Nº */}
+                    <td className="px-3 py-2.5 text-slate-600">
+                      {row.numero || 'S/N'}
+                    </td>
 
-                  {/* Columna LOTE CATAST. PROV */}
-                  <td className="px-3 py-2.5 font-mono text-slate-500">
-                    {row.lote_catast_provincia || '-'}
-                  </td>
+                    {/* Columna LOTE CATAST. MUN */}
+                    <td className="px-3 py-2.5 font-mono text-slate-500">
+                      {row.lote_catast_muni || '-'}
+                    </td>
 
-                  {/* Columna CONEX. GAB. */}
-                  <td className="px-3 py-2.5 text-center">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${row.conexion_gabinete ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'text-slate-400'}`}>
-                      {row.conexion_gabinete ? 'SÍ' : 'NO'}
-                    </span>
-                  </td>
+                    {/* Columna LOTE CATAST. PROV */}
+                    <td className="px-3 py-2.5 font-mono text-slate-500">
+                      {row.lote_catast_provincia || '-'}
+                    </td>
 
-                  {/* Columna GAB. COLOC. */}
-                  <td className="px-3 py-2.5 text-center">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${row.gabinete_colocado ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'text-slate-400'}`}>
-                      {row.gabinete_colocado ? 'SÍ' : 'NO'}
-                    </span>
-                  </td>
+                    {/* Columna CONEX. GAB. */}
+                    <td className="px-3 py-2.5 text-center">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${tieneGabinete ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'text-slate-400'}`}>
+                        {tieneGabinete ? 'SÍ' : 'NO'}
+                      </span>
+                    </td>
 
-                  {/* Columna TITULAR SERVICIO */}
-                  <td className="px-3 py-2.5 text-slate-700">
-                    {row.titular_nombre || '-'}
-                  </td>
+                    {/* Columna GAB. COLOC. */}
+                    <td className="px-3 py-2.5 text-center">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${row.gabinete_colocado ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'text-slate-400'}`}>
+                        {row.gabinete_colocado ? 'SÍ' : 'NO'}
+                      </span>
+                    </td>
 
-                  {/* Columna PRECIO X MT. */}
-                  <td className="px-3 py-2.5 font-mono text-right text-slate-700">
-                    ${row.precio_x_metro.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                  </td>
+                    {/* Columna TITULAR SERVICIO */}
+                    <td className="px-3 py-2.5 text-slate-700">
+                      {row.titular_nombre || '-'}
+                    </td>
 
-                  {/* Columna COSTO OBRA */}
-                  <td className="px-3 py-2.5 font-mono text-right text-slate-800">
-                    ${row.costo_obra.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                  </td>
+                    {/* Columna PRECIO X MT. */}
+                    <td className="px-3 py-2.5 font-mono text-right text-slate-700">
+                      ${Number(row.precio_x_metro || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                    </td>
 
-                  {/* Columna SERV. DOM */}
-                  <td className="px-3 py-2.5 font-mono text-right text-slate-600">
-                    ${row.serv_dom.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                  </td>
+                    {/* Columna COSTO OBRA */}
+                    <td className="px-3 py-2.5 font-mono text-right text-slate-800">
+                      ${costoObraNum.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                    </td>
 
-                  {/* Columna COSTO TOTAL */}
-                  <td className="px-3 py-2.5 font-mono text-right font-bold text-slate-900">
-                    ${row.costo_total.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                  </td>
+                    {/* Columna SERV. DOM (CORREGIDO) */}
+                    <td className="px-3 py-2.5 font-mono text-right text-slate-600">
+                      {tieneGabinete ? (
+                        `$${servDomNum.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
+                      ) : (
+                        <span className="text-slate-400 font-sans italic text-[11px]">-</span>
+                      )}
+                    </td>
 
-                  {/* Columna PLAN PAGOS */}
-                  <td className="px-3 py-2.5 text-center">
-                    {row.tiene_contrato ? (
-                      <div className="inline-flex flex-col items-center">
-                        <span className="font-mono font-bold text-slate-800 text-xs">
-                          {row.plan_pagos} ctas
-                        </span>
-                        {row.monto_anticipo > 0 && (
-                          <span className="text-[10px] font-semibold text-brand-600 bg-brand-50 px-1.5 py-0.2 rounded mt-0.5 border border-brand-200">
-                            + Anticipo
+                    {/* Columna COSTO TOTAL (CORREGIDO) */}
+                    <td className="px-3 py-2.5 font-mono text-right font-bold text-slate-900">
+                      ${costoTotalReal.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                    </td>
+
+                    {/* Columna PLAN PAGOS */}
+                    <td className="px-3 py-2.5 text-center">
+                      {row.tiene_contrato ? (
+                        <div className="inline-flex flex-col items-center">
+                          <span className="font-mono font-bold text-slate-800 text-xs">
+                            {row.plan_pagos} ctas
                           </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
-                        Sin Plan
-                      </span>
-                    )}
-                  </td>
+                          {Number(row.monto_anticipo || 0) > 0 && (
+                            <span className="text-[10px] font-semibold text-brand-600 bg-brand-50 px-1.5 py-0.2 rounded mt-0.5 border border-brand-200">
+                              + Anticipo
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                          Sin Plan
+                        </span>
+                      )}
+                    </td>
 
-                  {/* Columna CUOTA BASE */}
-                  <td className="px-3 py-2.5 font-mono text-right">
-                    {row.tiene_contrato ? (
-                      <span className="font-bold text-slate-800 text-xs">
-                        ${row.cuota_base.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                    ) : (
-                      <span className="text-slate-400 font-medium">-</span>
-                    )}
-                  </td>
+                    {/* Columna CUOTA BASE */}
+                    <td className="px-3 py-2.5 font-mono text-right">
+                      {row.tiene_contrato ? (
+                        <span className="font-bold text-slate-800 text-xs">
+                          ${Number(row.cuota_base || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-medium">-</span>
+                      )}
+                    </td>
 
-                  {/* Columna ESTADO */}
-                  <td className="px-3 py-2.5 text-center">
-                    {row.tiene_contrato ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        Activo
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
-                        Pendiente
-                      </span>
-                    )}
-                  </td>
+                    {/* Columna ESTADO */}
+                    <td className="px-3 py-2.5 text-center">
+                      {row.tiene_contrato ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          Activo
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                          Pendiente
+                        </span>
+                      )}
+                    </td>
 
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

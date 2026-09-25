@@ -149,40 +149,59 @@ export class DashboardRepository {
   }
 
   /**
-   * KPI 3: Matriz de morosidad (Aging Report)
+   * KPI 3: Matriz de morosidad (Aging Report) con métrica de auditoría
    */
   async obtenerAgingMora(idObra: number | null): Promise<AgingMoraResponseDTO> {
     const query = `
-      WITH cuotas_clasificadas AS (
+      WITH pagos_ultimos AS (
+        SELECT 
+          id_cuota,
+          MAX(fecha_pago) AS ultima_fecha_pago
+        FROM pagos
+        GROUP BY id_cuota
+      ),
+      cuotas_detalle AS (
         SELECT 
           con.id_contrato,
           i.id_inmueble,
-          -- Etiqueta del plan basada en el mayor número de cuotas contratadas
           CONCAT('Plan ', GREATEST(COALESCE(con.plan_cuotas_obra, 0), COALESCE(con.plan_cuotas_gabinete, 0)), ' Cuotas') AS tipo_plan,
+          c.id_cuota,
+          c.estado,
+          c.fecha_vencimiento,
           c.saldo_remanente::float AS saldo,
+          pu.ultima_fecha_pago,
+          -- Días de atraso individual por cuota con casteo explícito a date e int
           CASE 
-            WHEN c.fecha_vencimiento >= CURRENT_DATE THEN 'AL_DIA'
-            WHEN (CURRENT_DATE - c.fecha_vencimiento) BETWEEN 1 AND 30 THEN 'MORA_1_30'
-            WHEN (CURRENT_DATE - c.fecha_vencimiento) BETWEEN 31 AND 60 THEN 'MORA_31_60'
-            WHEN (CURRENT_DATE - c.fecha_vencimiento) BETWEEN 61 AND 90 THEN 'MORA_61_90'
+            WHEN c.estado != 'PAGADA' AND c.fecha_vencimiento::date < CURRENT_DATE 
+              THEN (CURRENT_DATE - c.fecha_vencimiento::date)::int
+            WHEN c.estado = 'PAGADA' AND pu.ultima_fecha_pago IS NOT NULL AND pu.ultima_fecha_pago::date > c.fecha_vencimiento::date 
+              THEN (pu.ultima_fecha_pago::date - c.fecha_vencimiento::date)::int
+            ELSE 0 
+          END AS dias_atraso,
+          -- Clasificación de buckets
+          CASE 
+            WHEN c.fecha_vencimiento::date >= CURRENT_DATE THEN 'AL_DIA'
+            WHEN (CURRENT_DATE - c.fecha_vencimiento::date) BETWEEN 1 AND 30 THEN 'MORA_1_30'
+            WHEN (CURRENT_DATE - c.fecha_vencimiento::date) BETWEEN 31 AND 60 THEN 'MORA_31_60'
+            WHEN (CURRENT_DATE - c.fecha_vencimiento::date) BETWEEN 61 AND 90 THEN 'MORA_61_90'
             ELSE 'MORA_MAS_90'
           END AS bucket
         FROM cuotas c
         JOIN contratos con ON con.id_contrato = c.id_contrato
         JOIN inmuebles i ON i.id_inmueble = con.id_inmueble
+        LEFT JOIN pagos_ultimos pu ON pu.id_cuota = c.id_cuota
         WHERE ($1::int IS NULL OR i.id_obra = $1)
-          AND c.saldo_remanente > 0
-          AND c.estado IN ('PENDIENTE', 'PAGO_PARCIAL')
       )
       SELECT 
         tipo_plan,
-        COUNT(DISTINCT id_inmueble)::int AS total_clientes,
-        COALESCE(SUM(CASE WHEN bucket = 'AL_DIA' THEN saldo ELSE 0 END), 0)::float AS monto_al_dia,
-        COALESCE(SUM(CASE WHEN bucket = 'MORA_1_30' THEN saldo ELSE 0 END), 0)::float AS monto_1_30,
-        COALESCE(SUM(CASE WHEN bucket = 'MORA_31_60' THEN saldo ELSE 0 END), 0)::float AS monto_31_60,
-        COALESCE(SUM(CASE WHEN bucket = 'MORA_61_90' THEN saldo ELSE 0 END), 0)::float AS monto_61_90,
-        COALESCE(SUM(CASE WHEN bucket = 'MORA_MAS_90' THEN saldo ELSE 0 END), 0)::float AS monto_mas_90
-      FROM cuotas_clasificadas
+        COUNT(DISTINCT CASE WHEN estado IN ('PENDIENTE', 'PAGO_PARCIAL') AND saldo > 0 THEN id_inmueble END)::int AS total_clientes,
+        COALESCE(SUM(CASE WHEN estado IN ('PENDIENTE', 'PAGO_PARCIAL') AND bucket = 'AL_DIA' THEN saldo ELSE 0 END), 0)::float AS monto_al_dia,
+        COALESCE(SUM(CASE WHEN estado IN ('PENDIENTE', 'PAGO_PARCIAL') AND bucket = 'MORA_1_30' THEN saldo ELSE 0 END), 0)::float AS monto_1_30,
+        COALESCE(SUM(CASE WHEN estado IN ('PENDIENTE', 'PAGO_PARCIAL') AND bucket = 'MORA_31_60' THEN saldo ELSE 0 END), 0)::float AS monto_31_60,
+        COALESCE(SUM(CASE WHEN estado IN ('PENDIENTE', 'PAGO_PARCIAL') AND bucket = 'MORA_61_90' THEN saldo ELSE 0 END), 0)::float AS monto_61_90,
+        COALESCE(SUM(CASE WHEN estado IN ('PENDIENTE', 'PAGO_PARCIAL') AND bucket = 'MORA_MAS_90' THEN saldo ELSE 0 END), 0)::float AS monto_mas_90,
+        COALESCE(ROUND(AVG(dias_atraso)), 0)::int AS dias_atraso_promedio
+      FROM cuotas_detalle
       GROUP BY tipo_plan
       ORDER BY tipo_plan ASC;
     `;
@@ -221,6 +240,7 @@ export class DashboardRepository {
         monto_61_90: m61_90,
         monto_mas_90: mMas90,
         porcentaje_morosidad: porcentajeMorosidad,
+        dias_atraso_promedio: Math.round(Number(r.dias_atraso_promedio || 0)),
       };
     });
 

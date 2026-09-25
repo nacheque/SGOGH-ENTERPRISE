@@ -132,8 +132,13 @@ export const PlanCuotasModal: React.FC<Props> = ({
 
   if (!isOpen || !cuenta) return null;
 
+  // Cálculo seguro de gabinete y costos totales del lote
   const costoObra = Number(cuenta.costo_obra) || 0;
-  const servDom = cuenta.conexion_gabinete ? Number(cuenta.serv_dom) || 0 : 0;
+  // Si conexion_gabinete es false o null, forzar servDom a 0 estrictamente
+  const tieneGabinete = Boolean(cuenta.conexion_gabinete);
+  const servDom = tieneGabinete ? Number(cuenta.serv_dom || 0) : 0;
+  const costoTotalLote = costoObra + servDom;
+
   const metrosFrenteNum = Number(cuenta.metros_frente) || 0;
   const saldoFinanciarObra = Math.max(0, costoObra - (Number(anticipo) || 0));
 
@@ -271,13 +276,13 @@ export const PlanCuotasModal: React.FC<Props> = ({
             <div>
               <span className="text-slate-400 block text-[10px] uppercase font-bold">Conexión Gabinete</span>
               <span className="font-bold text-slate-800">
-                {cuenta.conexion_gabinete ? `$${servDom.toLocaleString('es-AR')}` : 'No Incluye'}
+                {tieneGabinete ? `$${servDom.toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '$0,00'}
               </span>
             </div>
             <div>
               <span className="text-slate-400 block text-[10px] uppercase font-bold">Costo Total Inicial</span>
               <span className="font-bold text-brand-600">
-                ${(costoObra + servDom).toLocaleString('es-AR')}
+                ${costoTotalLote.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
               </span>
             </div>
             <div>
