@@ -8,7 +8,7 @@ import { CarteraChequesTable } from '../components/finanzas/CarteraChequesTable'
 import { PlanCuotasModal } from '../components/finanzas/PlanCuotasModal';
 import { ObrasView } from './ObrasView';
 import { DashboardKPIs } from '../components/finanzas/DashboardKPIs';
-import { FileSpreadsheet, Search, X, Wallet, Users } from 'lucide-react';
+import { FileSpreadsheet, Search, X} from 'lucide-react';
 import { ImportarRoelaModal } from '../components/finanzas/ImportarRoelaModal';
 import {ImportarPlanesModal} from '../components/finanzas/ImportarPlanesModal';
 

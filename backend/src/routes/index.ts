@@ -8,6 +8,7 @@ import contratosRoutes from './contratos.routes';
 import pagosRoutes from './pagos.routes';
 import cuotasRoutes from './cuotas.routes';
 import conciliacionesRoutes from './conciliaciones.routes';
+import dashboardRoutes from './dashboard.routes';
 
 const router = Router();
 
@@ -31,5 +32,8 @@ router.use('/cuotas', cuotasRoutes);
 
 // Conciliaciones
 router.use('/conciliaciones', conciliacionesRoutes);
+
+// Dashboard
+router.use('/dashboard', dashboardRoutes);
 
 export default router;
