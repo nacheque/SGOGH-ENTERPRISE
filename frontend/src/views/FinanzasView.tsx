@@ -4,10 +4,11 @@ import { getObras } from '../api/obras.api';
 import { getInmuebles } from '../api/inmuebles.api';
 import { ResumenObraHeader } from '../components/finanzas/ResumenObraHeader';
 import { CuentaCorrienteTable } from '../components/finanzas/CuentaCorrienteTable';
+import { CarteraChequesTable } from '../components/finanzas/CarteraChequesTable';
 import { PlanCuotasModal } from '../components/finanzas/PlanCuotasModal';
 import { ObrasView } from './ObrasView';
 import { DashboardKPIs } from '../components/finanzas/DashboardKPIs';
-import { FileSpreadsheet, Search, X, PlusCircle } from 'lucide-react';
+import { FileSpreadsheet, Search, X, Wallet, Users } from 'lucide-react';
 import { ImportarRoelaModal } from '../components/finanzas/ImportarRoelaModal';
 import {ImportarPlanesModal} from '../components/finanzas/ImportarPlanesModal';
 
@@ -27,6 +28,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
   const [modalRoelaOpen, setModalRoelaOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [modalImportarPlanesOpen, setModalImportarPlanesOpen] = useState(false);
+  const [subTabFinanzas, setSubTabFinanzas] = useState<'PADRON' | 'CHEQUES'>('PADRON');
 
   // Declarar fetchData para poder reutilizarla tras pagos y conciliaciones
   const fetchData = async () => {
@@ -182,7 +184,7 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
         </div>
       )}
 
-      {/* PESTAÑA 2: CUENTA CORRIENTE */}
+      {/* PESTAÑA 2: CUENTA CORRIENTE Y TESORERÍA */}
       {activeTab === 'cuenta_corriente' && (
         <div className="space-y-6 animate-in fade-in duration-150">
           <ResumenObraHeader
@@ -192,64 +194,101 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
             totalVecinos={cuentaCorrienteData.length}
           />
 
-          {/* BARRA DE ACCIONES Y BÚSQUEDA RÁPIDA */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            {/* Buscador en tiempo real */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por Titular de Lote o ID-Cliente..."
-                className="w-full pl-9 pr-8 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 shadow-xs transition"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-md transition"
-                  title="Limpiar búsqueda"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
+          {/* SELECTOR DE SUB-PESTAÑAS */}
+          <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+            <button
+              type="button"
+              onClick={() => setSubTabFinanzas('PADRON')}
+              className={`inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer ${
+                subTabFinanzas === 'PADRON'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Cuentas Corrientes (Padrón)
+            </button>
 
-            {/* ... */}
-            <div className="flex items-center gap-2">
-              {/* BOTÓN NUEVO: IMPORTAR PLANES DE PAGO */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (!selectedObraId) {
-                    showToast('Debe seleccionar una obra para importar planes', 'error');
-                    return;
-                  }
-                  setModalImportarPlanesOpen(true);
-                }}
-                className="inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 rounded-xl transition shadow-xs cursor-pointer"
-              >
-                <FileSpreadsheet className="w-4 h-4" />
-                Importar Planes Masivos
-              </button>
-
-              {/* Botón Importar Rendición SIRO existente */}
-              <button
-                type="button"
-                onClick={() => setModalRoelaOpen(true)}
-                className="inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition shadow-xs cursor-pointer"              >
-                <FileSpreadsheet className="w-4 h-4 text-white" />
-                Importar Rendición SIRO
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setSubTabFinanzas('CHEQUES')}
+              className={`inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer ${
+                subTabFinanzas === 'CHEQUES'
+                  ? 'bg-brand-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Cartera de Valores y Cheques
+            </button>
           </div>
 
-          <CuentaCorrienteTable
-            data={filteredCuentaCorrienteData}
-            loading={loading}
-            onSelectCuenta={setSelectedCuentaModal}
-          />
+          {/* CONTENIDO SEGÚN SUB-PESTAÑA SELECCIONADA */}
+          {subTabFinanzas === 'PADRON' ? (
+            <div className="space-y-4">
+              {/* BARRA DE ACCIONES Y BÚSQUEDA RÁPIDA (PADRÓN) */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                {/* Buscador en tiempo real */}
+                <div className="relative flex-1 max-w-md">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Buscar por Titular de Lote o ID-Cliente..."
+                    className="w-full pl-9 pr-8 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 shadow-xs transition"
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-md transition cursor-pointer"
+                      title="Limpiar búsqueda"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Botonera de Importación */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!selectedObraId) {
+                        showToast('Debe seleccionar una obra para importar planes', 'error');
+                        return;
+                      }
+                      setModalImportarPlanesOpen(true);
+                    }}
+                    className="inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 rounded-xl transition shadow-xs cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
+                    Importar Planes Masivos
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setModalRoelaOpen(true)}
+                    className="inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition shadow-xs cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-white" />
+                    Importar Rendición SIRO
+                  </button>
+                </div>
+              </div>
+
+              {/* Tabla de Cuentas Corrientes */}
+              <CuentaCorrienteTable
+                data={filteredCuentaCorrienteData}
+                loading={loading}
+                onSelectCuenta={setSelectedCuentaModal}
+              />
+            </div>
+          ) : (
+            /* VISTA DE CUSTODIA: CARTERA DE CHEQUES Y ECHEQS */
+            <CarteraChequesTable selectedObraId={selectedObraId} />
+          )}
+
+          {/* MODALES DISPONIBLES EN AMBAS SUB-PESTAÑAS */}
           <PlanCuotasModal
             cuenta={selectedCuentaModal}
             isOpen={Boolean(selectedCuentaModal)}
@@ -258,15 +297,13 @@ export const FinanzasView: React.FC<Props> = ({ showToast }) => {
             onPlanCreado={fetchData}
           />
 
-          {/* MODAL IMPORTAR ROELA */}
           <ImportarRoelaModal
             isOpen={modalRoelaOpen}
             onClose={() => setModalRoelaOpen(false)}
             showToast={showToast}
-            onSuccess={fetchData} // <-- VINCULADO PARA REFRESCAR LA TABLA AL CONCILIAR
+            onSuccess={fetchData}
           />
 
-          {/* 4. MODAL IMPORTADOR DE PLANES */}
           {selectedObraId && (
             <ImportarPlanesModal
               isOpen={modalImportarPlanesOpen}

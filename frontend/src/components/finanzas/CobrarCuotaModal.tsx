@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { CuotaConPagoDTO } from '../../types';
 import api from '../../api/axios';
-import { X, CreditCard, Loader2, AlertCircle, Percent } from 'lucide-react';
+import { X, CreditCard, Loader2, AlertCircle, Percent, FileCheck2 } from 'lucide-react';
 
 interface Props {
   cuota: CuotaConPagoDTO | null;
@@ -50,6 +50,13 @@ export const CobrarCuotaModal: React.FC<Props> = ({
   const [medioPago, setMedioPago] = useState<string>('TRANSFERENCIA');
   const [comprobante, setComprobante] = useState<string>('');
 
+  // Estados para custodia de Cheques / ECHEQs
+  const [numeroCheque, setNumeroCheque] = useState<string>('');
+  const [bancoEmisor, setBancoEmisor] = useState<string>('');
+  const [cuitLibrador, setCuitLibrador] = useState<string>('');
+  const [fechaEmision, setFechaEmision] = useState<string>(todayStr);
+  const [fechaCobro, setFechaCobro] = useState<string>(todayStr);
+
   // Cálculo en vivo del monto nominal y saldo exigible
   const nuevoMontoNominal = esObra
     ? Number((pisoBase * (1 + (Number(porcentaje) || 0) / 100)).toFixed(2))
@@ -72,6 +79,11 @@ export const CobrarCuotaModal: React.FC<Props> = ({
       setFechaPago(todayStr);
       setMedioPago('TRANSFERENCIA');
       setComprobante('');
+      setNumeroCheque('');
+      setBancoEmisor('');
+      setCuitLibrador('');
+      setFechaEmision(todayStr);
+      setFechaCobro(todayStr);
     }
   }, [cuota, pisoBase]);
 
@@ -88,6 +100,24 @@ export const CobrarCuotaModal: React.FC<Props> = ({
   const remanentePosterior = Math.max(0, Number((saldoExigibleSugerido - montoIngresado).toFixed(2)));
   const esParcial = montoIngresado > 0 && montoIngresado < saldoExigibleSugerido - 0.01;
   const montoExcedido = montoIngresado > saldoExigibleSugerido + 0.01;
+
+  // Validaciones específicas para Cheques y ECHEQs
+  const esValor = medioPago === 'CHEQUE' || medioPago === 'ECHEQ';
+  const cuitLibradorLimpio = cuitLibrador.replace(/\D/g, '');
+  const cuitValido = !esValor || cuitLibradorLimpio.length === 11;
+  const fechasValidas = !esValor || (Boolean(fechaEmision) && Boolean(fechaCobro) && fechaCobro >= fechaEmision);
+  const datosValorValidos = !esValor || (
+    numeroCheque.trim().length > 0 &&
+    bancoEmisor.trim().length > 0 &&
+    cuitValido &&
+    fechasValidas
+  );
+
+  // Cálculo reactivo de caducidad (>30 días desde la fecha de cobro)
+  const diasTranscurridosCobro = (esValor && fechaCobro)
+    ? Math.floor((new Date().getTime() - new Date(`${fechaCobro}T00:00:00`).getTime()) / (1000 * 60 * 60 * 24))
+    : 0;
+  const chequeVencidoBancariamente = esValor && diasTranscurridosCobro > 30;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,9 +137,23 @@ export const CobrarCuotaModal: React.FC<Props> = ({
       return;
     }
 
+    if (esValor && !datosValorValidos) {
+      if (!cuitValido) {
+        showToast('El CUIT del librador debe tener 11 dígitos numéricos.', 'error');
+        return;
+      }
+      if (fechaCobro < fechaEmision) {
+        showToast('La fecha de cobro/depósito no puede ser anterior a la de emisión.', 'error');
+        return;
+      }
+      showToast('Por favor, complete todos los campos obligatorios del cheque/ECHEQ.', 'error');
+      return;
+    }
+
     try {
       setLoading(true);
-      await api.post('/pagos', {
+
+      const payload: Record<string, any> = {
         id_cuota: cuota.id_cuota,
         monto: montoIngresado,
         porcentaje_actualizacion: esObra
@@ -117,8 +161,18 @@ export const CobrarCuotaModal: React.FC<Props> = ({
           : 0,
         fecha_pago: fechaPago,
         medio_pago: medioPago,
-        comprobante: comprobante.trim() || undefined,
-      });
+        comprobante: comprobante.trim() || (esValor ? numeroCheque.trim() : undefined),
+      };
+
+      if (esValor) {
+        payload.numero_cheque = numeroCheque.trim();
+        payload.banco_emisor = bancoEmisor.trim();
+        payload.cuit_librador = cuitLibradorLimpio;
+        payload.fecha_emision = fechaEmision;
+        payload.fecha_cobro = fechaCobro;
+      }
+
+      await api.post('/pagos', payload);
 
       showToast(
         esParcial ? 'Pago parcial registrado con éxito' : 'Cobro cancelado en su totalidad',
@@ -136,7 +190,7 @@ export const CobrarCuotaModal: React.FC<Props> = ({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden flex flex-col">
+      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden flex flex-col max-h-[92vh]">
         {/* Cabecera */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <div className="flex items-center gap-3">
@@ -155,14 +209,14 @@ export const CobrarCuotaModal: React.FC<Props> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"
+            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Formulario */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
           {/* Parámetro de Actualización Acumulativa (Solo RED_OBRA) */}
           {esObra && (
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
@@ -219,7 +273,7 @@ export const CobrarCuotaModal: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={() => setMontoAbonar(saldoExigibleSugerido)}
-                className="text-[11px] font-bold text-brand-600 hover:underline"
+                className="text-[11px] font-bold text-brand-600 hover:underline cursor-pointer"
               >
                 Pagar Total ($
                 {saldoExigibleSugerido.toLocaleString('es-AR', { minimumFractionDigits: 2 })})
@@ -289,11 +343,113 @@ export const CobrarCuotaModal: React.FC<Props> = ({
               >
                 <option value="TRANSFERENCIA">Transferencia</option>
                 <option value="EFECTIVO">Efectivo</option>
-                <option value="CHEQUE">Cheque</option>
+                <option value="CHEQUE">Cheque Físico</option>
+                <option value="ECHEQ">ECHEQ</option>
                 <option value="DEBITO">Débito</option>
               </select>
             </div>
           </div>
+
+          {/* Bloque Condicional para Valores (Cheque Físico / ECHEQ) */}
+          {esValor && (
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3 animate-in fade-in duration-150">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 pb-1.5 border-b border-slate-200/70">
+                <FileCheck2 className="w-3.5 h-3.5 text-brand-600" />
+                <span>Datos del Valor ({medioPago === 'CHEQUE' ? 'Cheque Físico' : 'ECHEQ'})</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5 text-xs">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    N° Cheque / ID ECHEQ *
+                  </label>
+                  <input
+                    type="text"
+                    value={numeroCheque}
+                    onChange={(e) => setNumeroCheque(e.target.value)}
+                    placeholder="Ej: 00489212"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono focus:border-brand-500 outline-none text-xs"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Banco Emisor *
+                  </label>
+                  <input
+                    type="text"
+                    value={bancoEmisor}
+                    onChange={(e) => setBancoEmisor(e.target.value)}
+                    placeholder="Ej: Banco de Córdoba"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg focus:border-brand-500 outline-none text-xs"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    CUIT Librador *
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={13}
+                    value={cuitLibrador}
+                    onChange={(e) => setCuitLibrador(e.target.value)}
+                    placeholder="30-xxxxxxxx-x"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono focus:border-brand-500 outline-none text-xs"
+                    required
+                  />
+                  {!cuitValido && cuitLibrador.length > 0 && (
+                    <span className="text-[10px] text-rose-500 block mt-0.5">Debe contener 11 dígitos</span>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Fecha Emisión *
+                  </label>
+                  <input
+                    type="date"
+                    value={fechaEmision}
+                    onChange={(e) => setFechaEmision(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg focus:border-brand-500 outline-none text-xs"
+                    required
+                  />
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Fecha de Cobro / Depósito *
+                  </label>
+                  <input
+                    type="date"
+                    min={fechaEmision}
+                    value={fechaCobro}
+                    onChange={(e) => setFechaCobro(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg focus:border-brand-500 outline-none text-xs"
+                    required
+                  />
+                  {fechaCobro < fechaEmision && (
+                    <span className="text-[10px] text-rose-500 block mt-0.5">La fecha no puede ser menor a emisión</span>
+                  )}
+
+                  {/* Banner reactivo de advertencia (no bloqueante) */}
+                  {chequeVencidoBancariamente && (
+                    <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-300 flex items-start gap-2 text-amber-800 animate-in fade-in duration-150">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="text-[11px] leading-relaxed">
+                        <span className="font-bold">Advertencia de Caducidad Bancaria:</span> Han transcurrido{' '}
+                        <strong className="font-mono font-bold">{diasTranscurridosCobro} días</strong> desde la fecha de cobro.
+                        El plazo de vigencia bancaria estándar (30 días) ha expirado. Si confirma, este valor ingresará directamente en estado{' '}
+                        <span className="font-bold text-rose-700 bg-rose-50 px-1 py-0.5 rounded border border-rose-200">VENCIDO</span> a la cartera de custodia.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -303,7 +459,7 @@ export const CobrarCuotaModal: React.FC<Props> = ({
               type="text"
               value={comprobante}
               onChange={(e) => setComprobante(e.target.value)}
-              placeholder="Ej. REC-2026-0045"
+              placeholder={esValor ? "Opcional (se asocia N° cheque)" : "Ej. REC-2026-0045"}
               className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none transition"
             />
           </div>
@@ -312,14 +468,14 @@ export const CobrarCuotaModal: React.FC<Props> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              disabled={loading || montoIngresado <= 0 || montoExcedido}
-              className={`inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition disabled:opacity-50 ${
+              disabled={loading || montoIngresado <= 0 || montoExcedido || (esValor && !datosValorValidos)}
+              className={`inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition disabled:opacity-50 cursor-pointer ${
                 esParcial
                   ? 'bg-amber-600 hover:bg-amber-700'
                   : 'bg-emerald-600 hover:bg-emerald-700'
