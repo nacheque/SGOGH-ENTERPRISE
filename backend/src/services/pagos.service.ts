@@ -104,7 +104,7 @@ export class PagosService {
       throw error;
     }
 
-    // 1. Lógica de Nomenclatura del Lote según las columnas reales
+    // 1. Lógica de Nomenclatura del Lote
     let nomenclaturaLote = '';
     const lote = row.lote_catast_muni || row.lote_catast_provincia;
 
@@ -123,13 +123,13 @@ export class PagosService {
     const medio = (row.medio_pago || '').toUpperCase();
 
     if (medio === 'TRANSFERENCIA') {
-      detalleMedioPago = row.comprobante
-        ? `TRANSF. REF: ${row.comprobante}`
+      detalleMedioPago = row.referencia_transferencia
+        ? `TRANSFERENCIA BANCARIA (Ref: ${row.referencia_transferencia})`
         : 'TRANSFERENCIA BANCARIA';
     } else if (medio === 'CHEQUE' || medio === 'ECHEQ') {
       const nro = row.numero_cheque ? `N° ${row.numero_cheque}` : 'S/N';
-      const banco = row.banco_emisor ? ` - ${row.banco_emisor}` : '';
-      detalleMedioPago = `${medio} ${nro}${banco}`;
+      const banco = row.banco_emisor ? `Banco: ${row.banco_emisor}` : 'Banco: S/D';
+      detalleMedioPago = `${medio} ${nro} - ${banco}`;
     } else if (medio === 'EFECTIVO') {
       detalleMedioPago = 'EFECTIVO';
     } else {
@@ -138,7 +138,7 @@ export class PagosService {
 
     return {
       id_pago: row.id_pago,
-      nro_recibo: row.nro_recibo,
+      nro_recibo: row.nro_recibo, // Talonario correlativo institucional "000004"
       fecha_pago: row.fecha_pago,
       titular_nombre: row.titular_nombre || 'S/D',
       titular_dni: row.titular_dni,

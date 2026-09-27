@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { CuotaConPagoDTO } from '../../types';
-import api from '../../api/axios';
+import { registrarPago } from '../../api/pagos.api';
 import { X, CreditCard, Loader2, AlertCircle, Percent, FileCheck2 } from 'lucide-react';
+import { ReciboOficialModal } from './recibos/ReciboOficialModal';
 
 interface Props {
   cuota: CuotaConPagoDTO | null;
@@ -63,6 +64,10 @@ export const CobrarCuotaModal: React.FC<Props> = ({
     : Number(cuota.monto_actualizado || cuota.monto_base || 0);
 
   const saldoExigibleSugerido = Math.max(0, Number((nuevoMontoNominal - totalAbonado).toFixed(2)));
+
+  // Estados para disparar el Recibo Oficial tras cobro exitoso
+  const [reciboModalOpen, setReciboModalOpen] = useState(false);
+  const [idPagoRecibo, setIdPagoRecibo] = useState<number | null>(null);
 
   // Inicialización de montos al abrir o cambiar la cuota
   useEffect(() => {
@@ -172,14 +177,28 @@ export const CobrarCuotaModal: React.FC<Props> = ({
         payload.fecha_cobro = fechaCobro;
       }
 
-      await api.post('/pagos', payload);
+      // Llamada limpia a través de la capa API
+      const res = await registrarPago(payload as any);
+
+      // Captura defensiva del ID del pago según cómo lo devuelva el backend
+      const idPagoCreado = (res as any)?.id_pago || (res as any)?.data?.id_pago || (res as any)?.data?.id;
 
       showToast(
         esParcial ? 'Pago parcial registrado con éxito' : 'Cobro cancelado en su totalidad',
         'success'
       );
+
+      // Notificamos para refrescar la grilla de cuotas y cuentas corrientes
       onSuccess();
-      onClose();
+      window.dispatchEvent(new CustomEvent('padron:actualizado'));
+
+      // Si obtuvimos el ID del pago, abrimos el modal del recibo oficial; si no, cerramos
+      if (idPagoCreado) {
+        setIdPagoRecibo(Number(idPagoCreado));
+        setReciboModalOpen(true);
+      } else {
+        onClose();
+      }
     } catch (err: any) {
       const errorMsg = err.response?.data?.message || 'Error al registrar el cobro';
       showToast(errorMsg, 'error');
@@ -189,311 +208,326 @@ export const CobrarCuotaModal: React.FC<Props> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden flex flex-col max-h-[92vh]">
-        {/* Cabecera */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
-              <CreditCard className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-800">
-                Registrar Cobro • Cuota #{cuota.nro_cuota}
-              </h3>
-              <p className="text-[11px] text-slate-500 font-medium">
-                Período: {cuota.periodo} | Concepto: {cuota.concepto}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Formulario */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
-          {/* Parámetro de Actualización Acumulativa (Solo RED_OBRA) */}
-          {esObra && (
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                  <Percent className="w-3.5 h-3.5 text-brand-600" />
-                  Ajuste / Índice del Período (%)
-                </label>
-                <span className="text-[10px] text-slate-500 font-mono">
-                  Piso base: ${pisoBase.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                </span>
+    <>
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden flex flex-col max-h-[92vh]">
+          {/* Cabecera */}
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                <CreditCard className="w-5 h-5" />
               </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  step="0.01"
-                  disabled={tienePagosPrevios}
-                  readOnly={tienePagosPrevios}
-                  value={porcentaje}
-                  onChange={(e) => {
-                    if (tienePagosPrevios) return;
-                    handlePorcentajeChange(parseFloat(e.target.value) || 0);
-                  }}
-                  className={`w-full px-3 py-1.5 text-xs font-bold font-mono rounded-lg border outline-none transition ${
-                    tienePagosPrevios
-                      ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed select-none'
-                      : 'bg-white text-slate-900 border-slate-200 focus:border-brand-500 shadow-xs'
-                  }`}
-                />
-              </div>
-
-              {/* Mensaje informativo si está bloqueado por cobro parcial */}
-              {tienePagosPrevios ? (
-                <p className="text-[10px] text-slate-400 italic">
-                  Índice fijado por imputación parcial previa
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">
+                  Registrar Cobro • Cuota #{cuota.nro_cuota}
+                </h3>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Período: {cuota.periodo} | Concepto: {cuota.concepto}
                 </p>
-              ) : null}
-
-              <div className="text-[11px] text-slate-500 flex justify-between border-t border-slate-200/60 pt-1.5">
-                <span>Nuevo Valor Contractual:</span>
-                <span className="font-mono font-bold text-slate-800">
-                  ${nuevoMontoNominal.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                </span>
               </div>
             </div>
-          )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
 
-          {/* Monto a Imputar */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold text-slate-700">
-                Monto a Imputar ($) *
-              </label>
-              <button
-                type="button"
-                onClick={() => setMontoAbonar(saldoExigibleSugerido)}
-                className="text-[11px] font-bold text-brand-600 hover:underline cursor-pointer"
-              >
-                Pagar Total ($
-                {saldoExigibleSugerido.toLocaleString('es-AR', { minimumFractionDigits: 2 })})
-              </button>
-            </div>
-            <div className="relative">
-              <span className="absolute left-3.5 top-2.5 text-sm font-bold text-slate-400">$</span>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                max={saldoExigibleSugerido}
-                value={montoAbonar}
-                onChange={(e) => setMontoAbonar(parseFloat(e.target.value) || 0)}
-                className={`w-full pl-8 pr-3 py-2 text-sm font-bold font-mono rounded-xl border outline-none transition ${
-                  montoExcedido
-                    ? 'border-rose-400 bg-rose-50/30 text-rose-800'
-                    : 'border-slate-200 bg-slate-50 focus:border-emerald-500 focus:bg-white text-slate-900'
-                }`}
-                required
-              />
-            </div>
+          {/* Formulario */}
+          <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
+            {/* Parámetro de Actualización Acumulativa (Solo RED_OBRA) */}
+            {esObra && (
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                    <Percent className="w-3.5 h-3.5 text-brand-600" />
+                    Ajuste / Índice del Período (%)
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    Piso base: ${pisoBase.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    step="0.01"
+                    disabled={tienePagosPrevios}
+                    readOnly={tienePagosPrevios}
+                    value={porcentaje}
+                    onChange={(e) => {
+                      if (tienePagosPrevios) return;
+                      handlePorcentajeChange(parseFloat(e.target.value) || 0);
+                    }}
+                    className={`w-full px-3 py-1.5 text-xs font-bold font-mono rounded-lg border outline-none transition ${
+                      tienePagosPrevios
+                        ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed select-none'
+                        : 'bg-white text-slate-900 border-slate-200 focus:border-brand-500 shadow-xs'
+                    }`}
+                  />
+                </div>
 
-            {/* Aviso de Remanente / Parcial */}
-            {esParcial && (
-              <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 flex items-start gap-2 text-amber-800">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div className="text-[11px]">
-                  <span className="font-bold">Aviso de Pago Parcial:</span> quedará un saldo remanente exigible de{' '}
-                  <span className="font-mono font-bold">
-                    ${remanentePosterior.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                {/* Mensaje informativo si está bloqueado por cobro parcial */}
+                {tienePagosPrevios ? (
+                  <p className="text-[10px] text-slate-400 italic">
+                    Índice fijado por imputación parcial previa
+                  </p>
+                ) : null}
+
+                <div className="text-[11px] text-slate-500 flex justify-between border-t border-slate-200/60 pt-1.5">
+                  <span>Nuevo Valor Contractual:</span>
+                  <span className="font-mono font-bold text-slate-800">
+                    ${nuevoMontoNominal.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
             )}
 
-            {montoExcedido && (
-              <p className="mt-1 text-[11px] font-medium text-rose-600">
-                El monto no puede superar la deuda exigible ($
-                {saldoExigibleSugerido.toLocaleString('es-AR', { minimumFractionDigits: 2 })}).
-              </p>
-            )}
-          </div>
+            {/* Monto a Imputar */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold text-slate-700">
+                  Monto a Imputar ($) *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setMontoAbonar(saldoExigibleSugerido)}
+                  className="text-[11px] font-bold text-brand-600 hover:underline cursor-pointer"
+                >
+                  Pagar Total ($
+                  {saldoExigibleSugerido.toLocaleString('es-AR', { minimumFractionDigits: 2 })})
+                </button>
+              </div>
+              <div className="relative">
+                <span className="absolute left-3.5 top-2.5 text-sm font-bold text-slate-400">$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max={saldoExigibleSugerido}
+                  value={montoAbonar}
+                  onChange={(e) => setMontoAbonar(parseFloat(e.target.value) || 0)}
+                  className={`w-full pl-8 pr-3 py-2 text-sm font-bold font-mono rounded-xl border outline-none transition ${
+                    montoExcedido
+                      ? 'border-rose-400 bg-rose-50/30 text-rose-800'
+                      : 'border-slate-200 bg-slate-50 focus:border-emerald-500 focus:bg-white text-slate-900'
+                  }`}
+                  required
+                />
+              </div>
 
-          <div className="grid grid-cols-2 gap-3">
+              {/* Aviso de Remanente / Parcial */}
+              {esParcial && (
+                <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 flex items-start gap-2 text-amber-800">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="text-[11px]">
+                    <span className="font-bold">Aviso de Pago Parcial:</span> quedará un saldo remanente exigible de{' '}
+                    <span className="font-mono font-bold">
+                      ${remanentePosterior.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {montoExcedido && (
+                <p className="mt-1 text-[11px] font-medium text-rose-600">
+                  El monto no puede superar la deuda exigible ($
+                  {saldoExigibleSugerido.toLocaleString('es-AR', { minimumFractionDigits: 2 })}).
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Fecha de Pago *
+                </label>
+                <input
+                  type="date"
+                  value={fechaPago}
+                  onChange={(e) => setFechaPago(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none transition"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Medio de Pago *
+                </label>
+                <select
+                  value={medioPago}
+                  onChange={(e) => setMedioPago(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none transition"
+                >
+                  <option value="TRANSFERENCIA">Transferencia</option>
+                  <option value="EFECTIVO">Efectivo</option>
+                  <option value="CHEQUE">Cheque Físico</option>
+                  <option value="ECHEQ">ECHEQ</option>
+                  <option value="DEBITO">Débito</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Bloque Condicional para Valores (Cheque Físico / ECHEQ) */}
+            {esValor && (
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3 animate-in fade-in duration-150">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 pb-1.5 border-b border-slate-200/70">
+                  <FileCheck2 className="w-3.5 h-3.5 text-brand-600" />
+                  <span>Datos del Valor ({medioPago === 'CHEQUE' ? 'Cheque Físico' : 'ECHEQ'})</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5 text-xs">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      N° Cheque / ID ECHEQ *
+                    </label>
+                    <input
+                      type="text"
+                      value={numeroCheque}
+                      onChange={(e) => setNumeroCheque(e.target.value)}
+                      placeholder="Ej: 00489212"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono focus:border-brand-500 outline-none text-xs"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Banco Emisor *
+                    </label>
+                    <input
+                      type="text"
+                      value={bancoEmisor}
+                      onChange={(e) => setBancoEmisor(e.target.value)}
+                      placeholder="Ej: Banco de Córdoba"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg focus:border-brand-500 outline-none text-xs"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      CUIT Librador *
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={13}
+                      value={cuitLibrador}
+                      onChange={(e) => setCuitLibrador(e.target.value)}
+                      placeholder="30-xxxxxxxx-x"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono focus:border-brand-500 outline-none text-xs"
+                      required
+                    />
+                    {!cuitValido && cuitLibrador.length > 0 && (
+                      <span className="text-[10px] text-rose-500 block mt-0.5">Debe contener 11 dígitos</span>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Fecha Emisión *
+                    </label>
+                    <input
+                      type="date"
+                      value={fechaEmision}
+                      onChange={(e) => setFechaEmision(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg focus:border-brand-500 outline-none text-xs"
+                      required
+                    />
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Fecha de Cobro / Depósito *
+                    </label>
+                    <input
+                      type="date"
+                      min={fechaEmision}
+                      value={fechaCobro}
+                      onChange={(e) => setFechaCobro(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg focus:border-brand-500 outline-none text-xs"
+                      required
+                    />
+                    {fechaCobro < fechaEmision && (
+                      <span className="text-[10px] text-rose-500 block mt-0.5">La fecha no puede ser menor a emisión</span>
+                    )}
+
+                    {/* Banner reactivo de advertencia (no bloqueante) */}
+                    {chequeVencidoBancariamente && (
+                      <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-300 flex items-start gap-2 text-amber-800 animate-in fade-in duration-150">
+                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="text-[11px] leading-relaxed">
+                          <span className="font-bold">Advertencia de Caducidad Bancaria:</span> Han transcurrido{' '}
+                          <strong className="font-mono font-bold">{diasTranscurridosCobro} días</strong> desde la fecha de cobro.
+                          El plazo de vigencia bancaria estándar (30 días) ha expirado. Si confirma, este valor ingresará directamente en estado{' '}
+                          <span className="font-bold text-rose-700 bg-rose-50 px-1 py-0.5 rounded border border-rose-200">VENCIDO</span> a la cartera de custodia.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Fecha de Pago *
+                Nº de Comprobante / Ref. de Pago
               </label>
               <input
-                type="date"
-                value={fechaPago}
-                onChange={(e) => setFechaPago(e.target.value)}
+                type="text"
+                value={comprobante}
+                onChange={(e) => setComprobante(e.target.value)}
+                placeholder={esValor ? "Opcional (se asocia N° cheque)" : "Ej. REC-2026-0045"}
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none transition"
-                required
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Medio de Pago *
-              </label>
-              <select
-                value={medioPago}
-                onChange={(e) => setMedioPago(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none transition"
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
               >
-                <option value="TRANSFERENCIA">Transferencia</option>
-                <option value="EFECTIVO">Efectivo</option>
-                <option value="CHEQUE">Cheque Físico</option>
-                <option value="ECHEQ">ECHEQ</option>
-                <option value="DEBITO">Débito</option>
-              </select>
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={loading || montoIngresado <= 0 || montoExcedido || (esValor && !datosValorValidos)}
+                className={`inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition disabled:opacity-50 cursor-pointer ${
+                  esParcial
+                    ? 'bg-amber-600 hover:bg-amber-700'
+                    : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Imputando...
+                  </>
+                ) : esParcial ? (
+                  'Confirmar Pago Parcial'
+                ) : (
+                  'Confirmar Cobro Total'
+                )}
+              </button>
             </div>
-          </div>
-
-          {/* Bloque Condicional para Valores (Cheque Físico / ECHEQ) */}
-          {esValor && (
-            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3 animate-in fade-in duration-150">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 pb-1.5 border-b border-slate-200/70">
-                <FileCheck2 className="w-3.5 h-3.5 text-brand-600" />
-                <span>Datos del Valor ({medioPago === 'CHEQUE' ? 'Cheque Físico' : 'ECHEQ'})</span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2.5 text-xs">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    N° Cheque / ID ECHEQ *
-                  </label>
-                  <input
-                    type="text"
-                    value={numeroCheque}
-                    onChange={(e) => setNumeroCheque(e.target.value)}
-                    placeholder="Ej: 00489212"
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono focus:border-brand-500 outline-none text-xs"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    Banco Emisor *
-                  </label>
-                  <input
-                    type="text"
-                    value={bancoEmisor}
-                    onChange={(e) => setBancoEmisor(e.target.value)}
-                    placeholder="Ej: Banco de Córdoba"
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg focus:border-brand-500 outline-none text-xs"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    CUIT Librador *
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={13}
-                    value={cuitLibrador}
-                    onChange={(e) => setCuitLibrador(e.target.value)}
-                    placeholder="30-xxxxxxxx-x"
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono focus:border-brand-500 outline-none text-xs"
-                    required
-                  />
-                  {!cuitValido && cuitLibrador.length > 0 && (
-                    <span className="text-[10px] text-rose-500 block mt-0.5">Debe contener 11 dígitos</span>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    Fecha Emisión *
-                  </label>
-                  <input
-                    type="date"
-                    value={fechaEmision}
-                    onChange={(e) => setFechaEmision(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg focus:border-brand-500 outline-none text-xs"
-                    required
-                  />
-                </div>
-
-                <div className="col-span-2">
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    Fecha de Cobro / Depósito *
-                  </label>
-                  <input
-                    type="date"
-                    min={fechaEmision}
-                    value={fechaCobro}
-                    onChange={(e) => setFechaCobro(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg focus:border-brand-500 outline-none text-xs"
-                    required
-                  />
-                  {fechaCobro < fechaEmision && (
-                    <span className="text-[10px] text-rose-500 block mt-0.5">La fecha no puede ser menor a emisión</span>
-                  )}
-
-                  {/* Banner reactivo de advertencia (no bloqueante) */}
-                  {chequeVencidoBancariamente && (
-                    <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-300 flex items-start gap-2 text-amber-800 animate-in fade-in duration-150">
-                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                      <div className="text-[11px] leading-relaxed">
-                        <span className="font-bold">Advertencia de Caducidad Bancaria:</span> Han transcurrido{' '}
-                        <strong className="font-mono font-bold">{diasTranscurridosCobro} días</strong> desde la fecha de cobro.
-                        El plazo de vigencia bancaria estándar (30 días) ha expirado. Si confirma, este valor ingresará directamente en estado{' '}
-                        <span className="font-bold text-rose-700 bg-rose-50 px-1 py-0.5 rounded border border-rose-200">VENCIDO</span> a la cartera de custodia.
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Nº de Comprobante / Recibo
-            </label>
-            <input
-              type="text"
-              value={comprobante}
-              onChange={(e) => setComprobante(e.target.value)}
-              placeholder={esValor ? "Opcional (se asocia N° cheque)" : "Ej. REC-2026-0045"}
-              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none transition"
-            />
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={loading || montoIngresado <= 0 || montoExcedido || (esValor && !datosValorValidos)}
-              className={`inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition disabled:opacity-50 cursor-pointer ${
-                esParcial
-                  ? 'bg-amber-600 hover:bg-amber-700'
-                  : 'bg-emerald-600 hover:bg-emerald-700'
-              }`}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Imputando...
-                </>
-              ) : esParcial ? (
-                'Confirmar Pago Parcial'
-              ) : (
-                'Confirmar Cobro Total'
-              )}
-            </button>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
-    </div>
+
+      {/* Recibo Oficial Modal: se abre inmediatamente con el ID del pago creado */}
+      {idPagoRecibo && (
+        <ReciboOficialModal
+          isOpen={reciboModalOpen}
+          idPago={idPagoRecibo}
+          onClose={() => {
+            setReciboModalOpen(false);
+            setIdPagoRecibo(null);
+            onClose(); // Cierra definitivamente el modal de cobro
+          }}
+        />
+      )}
+    </>
   );
 };

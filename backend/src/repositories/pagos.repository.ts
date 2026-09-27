@@ -385,6 +385,7 @@ export class PagosRepository {
 
   /**
    * Obtiene los datos consolidados para la emisión del recibo oficial
+   * Desacopla el número de recibo correlativo interno de la referencia bancaria externa.
    */
   async obtenerDatosRecibo(idPago: number): Promise<ReciboRawRow | null> {
     const query = `
@@ -393,8 +394,8 @@ export class PagosRepository {
         p.monto::float AS monto_pagado,
         TO_CHAR(p.fecha_pago, 'DD/MM/YYYY') AS fecha_pago,
         p.medio_pago,
-        COALESCE(p.comprobante, LPAD(p.id_pago::text, 6, '0')) AS nro_recibo,
-        p.comprobante,
+        LPAD(p.id_pago::text, 6, '0') AS nro_recibo,
+        p.comprobante AS referencia_transferencia,
         p.numero_cheque,
         p.banco_emisor,
         c.id_cuota,

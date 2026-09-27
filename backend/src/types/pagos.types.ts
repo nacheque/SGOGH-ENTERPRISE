@@ -102,9 +102,9 @@ export interface ReciboRawRow {
   fecha_pago: string;
   medio_pago: string;
   nro_recibo: string;
+  referencia_transferencia: string | null;
   numero_cheque: string | null;
   banco_emisor: string | null;
-  comprobante: string | null;
   id_cuota: number;
   nro_cuota: number;
   concepto_cuota: string;
