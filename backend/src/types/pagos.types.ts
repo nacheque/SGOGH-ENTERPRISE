@@ -75,3 +75,50 @@ export interface ChequeCarteraDTO {
   estado_custodia: EstadoCustodiaCheque;
   dias_para_cobro: number;
 }
+
+//============================
+// DTOs para la generacion de Recibos de Pago
+//============================
+
+export interface ReciboDatosDTO {
+  id_pago: number;
+  nro_recibo: string;
+  fecha_pago: string; // Formato "DD/MM/YYYY"
+  titular_nombre: string;
+  titular_dni: string;
+  monto_pagado: number;
+  nro_cuota: number;
+  concepto_cuota: string;
+  obra_nombre: string;
+  obra_localidad: string;
+  medio_pago: string; // "EFECTIVO" | "TRANSFERENCIA" | "CHEQUE" | "ECHEQ"
+  detalle_medio_pago?: string;
+  nomenclatura_lote: string;
+}
+
+export interface ReciboRawRow {
+  id_pago: number;
+  monto_pagado: number;
+  fecha_pago: string;
+  medio_pago: string;
+  nro_recibo: string;
+  numero_cheque: string | null;
+  banco_emisor: string | null;
+  comprobante: string | null;
+  id_cuota: number;
+  nro_cuota: number;
+  concepto_cuota: string;
+  id_contrato: number;
+  id_obra: number;
+  nombre_obra: string;
+  obra_localidad: string;
+  id_inmueble: number;
+  clave_cliente: string;
+  calle: string | null;
+  numero: string | null;
+  manzana: string | null;
+  lote_catast_muni: string | null;
+  lote_catast_provincia: string | null;
+  titular_nombre: string | null;
+  titular_dni: string;
+}

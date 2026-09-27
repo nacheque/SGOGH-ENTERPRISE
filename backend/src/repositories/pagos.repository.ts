@@ -2,6 +2,7 @@ import { pool } from '../config/database';
 import { PoolClient } from 'pg';
 import { CreatePagoDTO, PagoResponseDTO, CuotaConPagoDTO, ChequeCarteraDTO } from '../types/pagos.types';
 import { EstadoCuota } from '../types/contratos.types';
+import { ReciboRawRow } from '../types/pagos.types';
 
 export class PagosRepository {
   /**
@@ -380,5 +381,48 @@ export class PagosRepository {
 
     const { rows } = await pool.query(query, params);
     return rows;
+  }
+
+  /**
+   * Obtiene los datos consolidados para la emisión del recibo oficial
+   */
+  async obtenerDatosRecibo(idPago: number): Promise<ReciboRawRow | null> {
+    const query = `
+      SELECT 
+        p.id_pago,
+        p.monto::float AS monto_pagado,
+        TO_CHAR(p.fecha_pago, 'DD/MM/YYYY') AS fecha_pago,
+        p.medio_pago,
+        COALESCE(p.comprobante, LPAD(p.id_pago::text, 6, '0')) AS nro_recibo,
+        p.comprobante,
+        p.numero_cheque,
+        p.banco_emisor,
+        c.id_cuota,
+        c.nro_cuota,
+        c.concepto AS concepto_cuota,
+        con.id_contrato,
+        o.id_obra,
+        o.nombre_obra,
+        COALESCE(o.ubicacion, 'S/D') AS obra_localidad,
+        i.id_inmueble,
+        i.clave_cliente,
+        i.calle,
+        i.numero,
+        i.manzana,
+        i.lote_catast_muni,
+        i.lote_catast_provincia,
+        COALESCE(per.nombre_completo, 'Consumidor Final / Sin Titular') AS titular_nombre,
+        COALESCE(per.dni, per.cuit, 'S/D') AS titular_dni
+      FROM pagos p
+      JOIN cuotas c ON c.id_cuota = p.id_cuota
+      JOIN contratos con ON con.id_contrato = c.id_contrato
+      JOIN inmuebles i ON i.id_inmueble = con.id_inmueble
+      JOIN obras o ON o.id_obra = i.id_obra
+      LEFT JOIN personas per ON per.id_persona = i.id_titular
+      WHERE p.id_pago = $1;
+    `;
+
+    const { rows } = await pool.query(query, [idPago]);
+    return rows.length > 0 ? rows[0] : null;
   }
 }

@@ -47,6 +47,30 @@ export class PagosController {
       next(error);
     }
   }
+
+  getReciboDatos = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const idPago = Number(req.params.id_pago);
+
+      if (isNaN(idPago) || idPago <= 0) {
+        res.status(400).json({ error: 'El parámetro id_pago debe ser un número entero positivo' });
+        return;
+      }
+
+      const data = await this.pagosService.obtenerDatosRecibo(idPago);
+
+      res.status(200).json({
+        status: 'success',
+        data,
+      });
+    } catch (error: any) {
+      if (error.statusCode === 404 || error.message === 'Pago no encontrado') {
+        res.status(404).json({ error: 'Pago no encontrado' });
+        return;
+      }
+      next(error);
+    }
+  };
 }
 
 export const pagosController = new PagosController();

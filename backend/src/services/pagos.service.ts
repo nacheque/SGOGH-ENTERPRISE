@@ -1,5 +1,5 @@
 import { PagosRepository } from '../repositories/pagos.repository';
-import { CreatePagoDTO, PagoResponseDTO, CuotaConPagoDTO, ChequeCarteraDTO } from '../types/pagos.types';
+import { CreatePagoDTO, PagoResponseDTO, CuotaConPagoDTO, ChequeCarteraDTO, ReciboDatosDTO } from '../types/pagos.types';
 
 export class PagosService {
   private pagosRepo: PagosRepository;
@@ -84,5 +84,72 @@ export class PagosService {
     const obraId = idObra && !isNaN(Number(idObra)) ? Number(idObra) : null;
 
     return await this.pagosRepo.listarCarteraCheques(obraId, estado);
+  }
+
+  /**
+   * Genera el DTO con los datos formateados para el recibo oficial
+   */
+  async obtenerDatosRecibo(idPago: number): Promise<ReciboDatosDTO> {
+    if (!idPago || isNaN(idPago) || idPago <= 0) {
+      const error: any = new Error('El ID de pago debe ser un entero positivo válido');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const row = await this.pagosRepo.obtenerDatosRecibo(idPago);
+
+    if (!row) {
+      const error: any = new Error('Pago no encontrado');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    // 1. Lógica de Nomenclatura del Lote según las columnas reales
+    let nomenclaturaLote = '';
+    const lote = row.lote_catast_muni || row.lote_catast_provincia;
+
+    if (row.manzana && lote) {
+      nomenclaturaLote = `Mz: ${row.manzana} - Lote: ${lote}`;
+    } else if (lote) {
+      nomenclaturaLote = `Lote: ${lote}`;
+    } else if (row.calle && row.numero) {
+      nomenclaturaLote = `${row.calle} ${row.numero}`;
+    } else {
+      nomenclaturaLote = `Clave Cliente: ${row.clave_cliente}`;
+    }
+
+    // 2. Lógica de Detalle de Medio de Pago
+    let detalleMedioPago = '';
+    const medio = (row.medio_pago || '').toUpperCase();
+
+    if (medio === 'TRANSFERENCIA') {
+      detalleMedioPago = row.comprobante
+        ? `TRANSF. REF: ${row.comprobante}`
+        : 'TRANSFERENCIA BANCARIA';
+    } else if (medio === 'CHEQUE' || medio === 'ECHEQ') {
+      const nro = row.numero_cheque ? `N° ${row.numero_cheque}` : 'S/N';
+      const banco = row.banco_emisor ? ` - ${row.banco_emisor}` : '';
+      detalleMedioPago = `${medio} ${nro}${banco}`;
+    } else if (medio === 'EFECTIVO') {
+      detalleMedioPago = 'EFECTIVO';
+    } else {
+      detalleMedioPago = medio;
+    }
+
+    return {
+      id_pago: row.id_pago,
+      nro_recibo: row.nro_recibo,
+      fecha_pago: row.fecha_pago,
+      titular_nombre: row.titular_nombre || 'S/D',
+      titular_dni: row.titular_dni,
+      monto_pagado: Number(row.monto_pagado),
+      nro_cuota: row.nro_cuota,
+      concepto_cuota: row.concepto_cuota,
+      obra_nombre: row.nombre_obra,
+      obra_localidad: row.obra_localidad,
+      medio_pago: row.medio_pago,
+      detalle_medio_pago: detalleMedioPago,
+      nomenclatura_lote: nomenclaturaLote,
+    };
   }
 }
