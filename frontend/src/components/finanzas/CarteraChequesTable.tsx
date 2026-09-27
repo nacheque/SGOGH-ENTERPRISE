@@ -11,6 +11,7 @@ import {
   ArrowUpRight,
   Loader2,
   RotateCcw,
+  MapPin,
 } from 'lucide-react';
 
 interface Props {
@@ -92,7 +93,7 @@ export const CarteraChequesTable: React.FC<Props> = ({ selectedObraId }) => {
     };
   }, [cheques]);
 
-  // Filtrado reactivo en memoria para el buscador
+  // Filtrado reactivo en memoria para el buscador (incluye manzana, lote y calle)
   const filteredCheques = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
     if (!term) return cheques;
@@ -103,7 +104,10 @@ export const CarteraChequesTable: React.FC<Props> = ({ selectedObraId }) => {
         c.titular_nombre?.toLowerCase().includes(term) ||
         c.banco_emisor?.toLowerCase().includes(term) ||
         c.cuit_librador?.includes(term) ||
-        c.clave_cliente?.toLowerCase().includes(term)
+        c.clave_cliente?.toLowerCase().includes(term) ||
+        c.manzana?.toLowerCase().includes(term) ||
+        c.lote?.toLowerCase().includes(term) ||
+        c.calle?.toLowerCase().includes(term)
       )
     );
   }, [cheques, searchTerm]);
@@ -195,7 +199,7 @@ export const CarteraChequesTable: React.FC<Props> = ({ selectedObraId }) => {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por N° de cheque, titular, CUIT o banco..."
+            placeholder="Buscar por N° cheque, titular, CUIT, Mz, Lote o banco..."
             className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-brand-500 outline-none transition"
           />
         </div>
@@ -245,7 +249,7 @@ export const CarteraChequesTable: React.FC<Props> = ({ selectedObraId }) => {
               <tr>
                 <th className="py-3 px-4">N° Cheque / Tipo</th>
                 <th className="py-3 px-4">Banco Emisor</th>
-                <th className="py-3 px-4">Titular / Clave Lote</th>
+                <th className="py-3 px-4">Titular / Inmueble Asignado</th>
                 <th className="py-3 px-4">CUIT Librador</th>
                 <th className="py-3 px-4">F. Emisión</th>
                 <th className="py-3 px-4">F. Cobro / Vence</th>
@@ -294,9 +298,29 @@ export const CarteraChequesTable: React.FC<Props> = ({ selectedObraId }) => {
 
                     <td className="py-3 px-4">
                       <div className="font-bold text-slate-800">{c.titular_nombre || '-'}</div>
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        Clave: {c.clave_cliente || '-'} (Cuota #{c.nro_cuota})
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                        {/* Prioridad 1: Dirección física (Calle y Número) */}
+                        {c.calle ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold text-[10px] border border-slate-200">
+                            <MapPin className="w-2.5 h-2.5 text-slate-400" />
+                            {c.calle} {c.numero || 'S/N'}
+                          </span>
+                        ) : (c.manzana || c.lote) ? (
+                          /* Fallback: Manzana y Lote si no hay calle */
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold text-[10px] border border-slate-200">
+                            <MapPin className="w-2.5 h-2.5 text-slate-400" />
+                            Mz {c.manzana || '-'} • Lote {c.lote || '-'}
+                          </span>
+                        ) : c.clave_cliente ? (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[10px]">
+                            Clave: {c.clave_cliente}
+                          </span>
+                        ) : null}
+
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          (Cuota #{c.nro_cuota})
+                        </span>
+                      </div>
                     </td>
 
                     <td className="py-3 px-4 font-mono text-[11px] text-slate-600">

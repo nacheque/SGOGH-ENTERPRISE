@@ -275,12 +275,15 @@ export class PagosRepository {
     }
   }
 
-  async getCuotasByInmueble(id_inmueble: number): Promise<CuotaConPagoDTO[]> {
+ /**
+   * Obtiene las cuotas de un inmueble incluyendo el historial completo de pagos y conciliación
+   */
+  async getCuotasByInmueble(idInmueble: number): Promise<CuotaConPagoDTO[]> {
     const query = `
       SELECT 
         c.id_cuota,
         c.id_contrato,
-        ct.id_inmueble,
+        i.id_inmueble,
         i.clave_cliente,
         c.concepto,
         c.nro_cuota,
@@ -288,12 +291,18 @@ export class PagosRepository {
         c.monto_base::float AS monto_base,
         c.monto_actualizado::float AS monto_actualizado,
         c.saldo_remanente::float AS saldo_remanente,
-        CAST(COALESCE(c.porcentaje_actualizacion, 0.00) AS FLOAT) AS porcentaje_actualizacion,
+        COALESCE(c.porcentaje_actualizacion, 0.00)::float AS porcentaje_actualizacion,
         TO_CHAR(c.fecha_vencimiento, 'YYYY-MM-DD') AS fecha_vencimiento,
         c.estado,
         COALESCE(SUM(p.monto), 0)::float AS total_abonado,
-        MAX(TO_CHAR(p.fecha_pago, 'YYYY-MM-DD')) AS ultima_fecha_pago,
-        MAX(p.comprobante) AS ultimo_comprobante,
+        TO_CHAR(MAX(p.fecha_pago), 'YYYY-MM-DD') AS ultima_fecha_pago,
+        (
+          SELECT p_sub.comprobante 
+          FROM pagos p_sub 
+          WHERE p_sub.id_cuota = c.id_cuota 
+          ORDER BY p_sub.fecha_pago DESC, p_sub.id_pago DESC 
+          LIMIT 1
+        ) AS ultimo_comprobante,
         COALESCE(
           json_agg(
             json_build_object(
@@ -302,20 +311,31 @@ export class PagosRepository {
               'monto', p.monto::float,
               'fecha_pago', TO_CHAR(p.fecha_pago, 'YYYY-MM-DD'),
               'medio_pago', p.medio_pago,
-              'comprobante', p.comprobante
+              'comprobante', p.comprobante,
+              'numero_cheque', p.numero_cheque,
+              'banco_emisor', p.banco_emisor,
+              'cuit_librador', p.cuit_librador,
+              'fecha_emision', TO_CHAR(p.fecha_emision, 'YYYY-MM-DD'),
+              'fecha_cobro', TO_CHAR(p.fecha_cobro, 'YYYY-MM-DD'),
+              'cuenta_bancaria', p.cuenta_bancaria,
+              'fecha_acreditacion', TO_CHAR(p.fecha_acreditacion, 'YYYY-MM-DD'),
+              'canal_cobro', p.canal_cobro,
+              'fecha_cobro_cliente', TO_CHAR(p.fecha_cobro_cliente, 'YYYY-MM-DD'),
+              'fecha_rendicion', TO_CHAR(p.fecha_rendicion, 'YYYY-MM-DD'),
+              'comision_cobro', COALESCE(p.comision_cobro, 0)::float
             ) ORDER BY p.fecha_pago ASC, p.id_pago ASC
           ) FILTER (WHERE p.id_pago IS NOT NULL),
           '[]'::json
         ) AS pagos
-      FROM cuotas c
-      INNER JOIN contratos ct ON c.id_contrato = ct.id_contrato
-      INNER JOIN inmuebles i ON ct.id_inmueble = i.id_inmueble
-      LEFT JOIN pagos p ON c.id_cuota = p.id_cuota
+      FROM contratos con
+      JOIN inmuebles i ON i.id_inmueble = con.id_inmueble
+      JOIN cuotas c ON c.id_contrato = con.id_contrato
+      LEFT JOIN pagos p ON p.id_cuota = c.id_cuota
       WHERE i.id_inmueble = $1
       GROUP BY 
-        c.id_cuota, 
-        c.id_contrato, 
-        ct.id_inmueble, 
+        c.id_cuota,
+        c.id_contrato,
+        i.id_inmueble,
         i.clave_cliente,
         c.concepto,
         c.nro_cuota,
@@ -326,10 +346,11 @@ export class PagosRepository {
         c.porcentaje_actualizacion,
         c.fecha_vencimiento,
         c.estado
-      ORDER BY c.fecha_vencimiento ASC, c.concepto ASC;
+      ORDER BY c.nro_cuota ASC;
     `;
-    const result = await pool.query(query, [id_inmueble]);
-    return result.rows;
+
+    const { rows } = await pool.query(query, [idInmueble]);
+    return rows;
   }
 
  async listarCarteraCheques(idObra?: number | null, estadoCustodia?: string | null): Promise<ChequeCarteraDTO[]> {

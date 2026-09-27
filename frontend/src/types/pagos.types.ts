@@ -88,7 +88,10 @@ export interface ReciboDatosDTO {
   obra_localidad: string;
   medio_pago: string;
   detalle_medio_pago?: string;
-  nomenclatura_lote: string;
+  nomenclatura_lote: string; // ej. "Mz: 1 - Lote: 1"
+  calle?: string;
+  numero?: string | null;
+  domicilio?: string;
 }
 
 // ==========================================

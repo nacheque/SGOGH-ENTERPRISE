@@ -76,7 +76,7 @@ export interface PagoResponseDTO {
   cuenta_bancaria?: string | null;
   fecha_acreditacion?: string | null;
 
-  // Redes Recaudación
+  // Redes Recaudación (Pago Fácil / Rapipago)
   canal_cobro?: string | null;
   fecha_cobro_cliente?: string | null;
   fecha_rendicion?: string | null;

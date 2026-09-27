@@ -56,8 +56,9 @@ export const ReciboOficialModal: React.FC<Props> = ({ isOpen, onClose, idPago })
         
         {/* Barra de control en pantalla (Oculta en PDF/Impresión) */}
         <div className="flex items-center justify-between px-6 py-3.5 bg-slate-100 border-b border-slate-200 print:hidden">
-          <div className="flex items-center gap-2 text-slate-700">
-            <span className="text-xs font-bold uppercase tracking-wider">Comprobante Oficial de Pago</span>
+          <div className="flex flex-col">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-700">Comprobante Oficial de Pago</span>
+            
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -160,11 +161,18 @@ export const ReciboOficialModal: React.FC<Props> = ({ isOpen, onClose, idPago })
                   </div>
                 </div>
 
-                {/* Localidad y Lote */}
+                {/* Localidad, Dirección y Lote */}
                 <div className="text-slate-900 leading-normal pl-2">
                   correspondiente al pago de obra de gas a la localidad de{' '}
-                  <span className="font-bold">{data.obra_localidad || data.obra_nombre}</span>{' '}
-                  ({data.nomenclatura_lote}).
+                  <span className="font-bold">{data.obra_localidad || data.obra_nombre}</span>
+                  {data.calle ? (
+                    <span>
+                      , sito en <span className="font-bold">{data.calle} {data.numero || 'S/N'}</span>
+                      {data.nomenclatura_lote && ` (${data.nomenclatura_lote})`}.
+                    </span>
+                  ) : (
+                    <span> ({data.nomenclatura_lote}).</span>
+                  )}
                 </div>
 
                 {/* Medio de Pago Aislado */}
@@ -214,8 +222,8 @@ export const ReciboOficialModal: React.FC<Props> = ({ isOpen, onClose, idPago })
       <style>{`
         @media print {
           @page {
-            size: A4 portrait;
-            margin: 15mm;
+            size: auto;
+            margin: 10mm;
           }
           body {
             visibility: hidden;
@@ -231,7 +239,7 @@ export const ReciboOficialModal: React.FC<Props> = ({ isOpen, onClose, idPago })
             width: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
-            padding: 10mm !important;
+            padding: 5mm !important;
             box-sizing: border-box;
           }
         }

@@ -71,54 +71,79 @@ export const HistorialPagosSubRow: React.FC<Props> = ({
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-600 font-medium">
                 {pagos.map((pago) => {
-                  const esTransf = pago.medio_pago === 'TRANSFERENCIA';
-                  const esExtra = pago.medio_pago === 'PAGO_FACIL' || pago.medio_pago === 'RAPIPAGO';
+                  const medioNorm = String(pago.medio_pago || '').toUpperCase();
+                  const esTransf = medioNorm === 'TRANSFERENCIA';
+                  const esExtra = medioNorm === 'PAGO_FACIL' || medioNorm === 'RAPIPAGO';
+                  const esCheque = medioNorm === 'CHEQUE' || medioNorm === 'ECHEQ';
 
                   return (
                     <tr key={pago.id_pago} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-2 px-3 font-mono text-[11px] text-slate-700 flex items-center gap-1">
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-700 flex items-center gap-1">
                         <Calendar className="w-3 h-3 text-slate-400" />
                         {formatearFecha(pago.fecha_pago)}
                       </td>
-                      <td className="py-2 px-3">
+                      
+                      <td className="py-2.5 px-3">
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${getMedioBadge(pago.medio_pago)}`}>
                           <CreditCard className="w-2.5 h-2.5" />
                           {pago.medio_pago.replace('_', ' ')}
                         </span>
                       </td>
-                      <td className="py-2 px-3 font-mono text-[11px] text-slate-800">
+
+                      {/* Columna Comprobante / Ref */}
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-800">
                         {pago.comprobante ? (
-                          <span className="font-semibold">{pago.comprobante}</span>
+                          <span className="font-semibold text-slate-900">{pago.comprobante}</span>
                         ) : (
-                          <span className="text-slate-400 italic">-</span>
+                          <span className="text-slate-400 italic">Sin ref.</span>
                         )}
                       </td>
-                      <td className="py-2 px-3 text-[11px]">
-                        {esTransf && pago.cuenta_bancaria ? (
-                          <div className="flex items-center gap-1 text-blue-700 max-w-xs truncate" title={pago.cuenta_bancaria}>
-                            <Building2 className="w-3 h-3 shrink-0" />
-                            <span className="truncate">{pago.cuenta_bancaria}</span>
-                          </div>
-                        ) : esExtra && (pago.canal_cobro || pago.comision_cobro) ? (
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-1 text-amber-800 font-medium truncate" title={pago.canal_cobro}>
-                              <Store className="w-3 h-3 shrink-0" />
-                              <span className="truncate">{pago.canal_cobro || 'Red Extrabancaria'}</span>
+
+                      {/* Columna Auditoría / Canal Destino con datos específicos */}
+                      <td className="py-2.5 px-3 text-[11px]">
+                        {esTransf ? (
+                          pago.cuenta_bancaria ? (
+                            <div className="space-y-0.5">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                                <Building2 className="w-2.5 h-2.5 shrink-0" />
+                                Cta: {pago.cuenta_bancaria}
+                              </span>
+                              {pago.fecha_acreditacion && (
+                                <div className="text-[10px] text-slate-400 font-mono">
+                                  Acreditado: {formatearFecha(pago.fecha_acreditacion)}
+                                </div>
+                              )}
                             </div>
+                          ) : (
+                            <span className="text-slate-400 italic text-[10px]">Cta. bancaria no informada</span>
+                          )
+                        ) : esExtra ? (
+                          <div className="space-y-0.5">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                              <Store className="w-2.5 h-2.5 shrink-0" />
+                              {pago.canal_cobro || 'Red Extrabancaria'}
+                            </span>
                             {Number(pago.comision_cobro || 0) > 0 && (
                               <div className="text-[10px] text-slate-500 font-mono">
-                                Comis: -${Number(pago.comision_cobro).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                                Comisión: -${Number(pago.comision_cobro).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                               </div>
                             )}
+                          </div>
+                        ) : esCheque ? (
+                          <div className="text-[10px] text-slate-700">
+                            <span className="font-bold">{pago.banco_emisor || 'Cheque en custodia'}</span>
+                            {pago.numero_cheque && <span className="font-mono ml-1">#{pago.numero_cheque}</span>}
                           </div>
                         ) : (
                           <span className="text-slate-400 truncate max-w-xs block">{pago.observaciones || '-'}</span>
                         )}
                       </td>
-                      <td className="py-2 px-3 font-mono font-bold text-slate-900 text-right">
+
+                      <td className="py-2.5 px-3 font-mono font-bold text-slate-900 text-right">
                         ${Number(pago.monto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="py-2 px-3 text-center">
+
+                      <td className="py-2.5 px-3 text-center">
                         <button
                           type="button"
                           onClick={() => setIdPagoRecibo(pago.id_pago)}

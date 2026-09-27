@@ -206,7 +206,7 @@ export const CobrarCuotaModal: React.FC<Props> = ({
       };
 
       if (esTransferencia) {
-        payload.cuenta_bancaria = cuentaBancaria;
+        payload.cuenta_bancaria = cuentaBancaria.trim();
         payload.fecha_acreditacion = fechaAcreditacion;
       } else if (esValor) {
         payload.numero_cheque = numeroCheque.trim();
@@ -222,7 +222,8 @@ export const CobrarCuotaModal: React.FC<Props> = ({
       }
 
       const res = await registrarPago(payload as any);
-      const idPagoCreado = (res as any)?.id_pago || (res as any)?.data?.id_pago;
+      // Extracción tolerante del id_pago independientemente de la envoltura de respuesta:
+      const idPagoCreado = (res as any)?.id_pago || (res as any)?.data?.id_pago || (res as any)?.data?.data?.id_pago;
 
       showToast(
         esParcial ? 'Pago parcial registrado con éxito' : 'Cobro cancelado en su totalidad',
@@ -232,6 +233,7 @@ export const CobrarCuotaModal: React.FC<Props> = ({
       onSuccess();
       window.dispatchEvent(new CustomEvent('padron:actualizado'));
 
+      // Disparo inmediato del Recibo Oficial
       if (idPagoCreado) {
         setIdPagoRecibo(Number(idPagoCreado));
         setReciboModalOpen(true);
