@@ -1,7 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import type { CuotaConPagoDTO } from '../../types';
+import type { CuotaConPagoDTO, MedioPago, RegistrarPagoPayload } from '../../types';
 import { registrarPago } from '../../api/pagos.api';
-import { X, CreditCard, Loader2, AlertCircle, Percent, FileCheck2 } from 'lucide-react';
+import {
+  X,
+  CreditCard,
+  Loader2,
+  AlertCircle,
+  Percent,
+  FileCheck2,
+  Building2,
+  Store,
+} from 'lucide-react';
 import { ReciboOficialModal } from './recibos/ReciboOficialModal';
 
 interface Props {
@@ -27,20 +36,15 @@ export const CobrarCuotaModal: React.FC<Props> = ({
   const esObra = cuota.concepto === 'RED_OBRA';
   const totalAbonado = Number(cuota.total_abonado || 0);
 
-  // Normalización del estado eliminando espacios y admitiendo guion bajo o espacio
   const estadoNormalizado = String(cuota.estado || '').toUpperCase().trim().replace(/\s+/g, '_');
   const esEstadoParcial = estadoNormalizado === 'PAGO_PARCIAL';
 
-  // Validación por diferencia de saldo (si el remanente es menor al nominal, ya hubo cobros previos)
   const remanenteActual = Number(cuota.saldo_remanente ?? cuota.monto_actualizado ?? 0);
   const nominalActual = Number(cuota.monto_actualizado || cuota.monto_base || 0);
   const tieneRemanenteMenor = nominalActual > 0 && remanenteActual < (nominalActual - 0.05);
-
-  // Bandera definitiva
   const tienePagosPrevios = esEstadoParcial || totalAbonado > 0.01 || tieneRemanenteMenor;
 
-  // Piso base de cálculo para encadenamiento inflacionario
-  const pisoBase = cuotaAnterior 
+  const pisoBase = cuotaAnterior
     ? Number(cuotaAnterior.monto_actualizado || cuotaAnterior.monto_base || 0)
     : Number(cuota.monto_base || 0);
 
@@ -48,28 +52,36 @@ export const CobrarCuotaModal: React.FC<Props> = ({
   const [porcentaje, setPorcentaje] = useState<number>(Number(cuota.porcentaje_actualizacion || 0));
   const [montoAbonar, setMontoAbonar] = useState<number>(0);
   const [fechaPago, setFechaPago] = useState<string>(todayStr);
-  const [medioPago, setMedioPago] = useState<string>('TRANSFERENCIA');
+  const [medioPago, setMedioPago] = useState<MedioPago>('TRANSFERENCIA');
   const [comprobante, setComprobante] = useState<string>('');
 
-  // Estados para custodia de Cheques / ECHEQs
+  // 1. Estados específicos: Transferencia
+  const [cuentaBancaria, setCuentaBancaria] = useState<string>('');
+  const [fechaAcreditacion, setFechaAcreditacion] = useState<string>(todayStr);
+
+  // 2. Estados específicos: Cheque / ECHEQ
   const [numeroCheque, setNumeroCheque] = useState<string>('');
   const [bancoEmisor, setBancoEmisor] = useState<string>('');
   const [cuitLibrador, setCuitLibrador] = useState<string>('');
   const [fechaEmision, setFechaEmision] = useState<string>(todayStr);
   const [fechaCobro, setFechaCobro] = useState<string>(todayStr);
 
-  // Cálculo en vivo del monto nominal y saldo exigible
+  // 3. Estados específicos: Extrabancarios (Pago Fácil / Rapipago)
+  const [canalCobro, setCanalCobro] = useState<string>('');
+  const [fechaCobroCliente, setFechaCobroCliente] = useState<string>(todayStr);
+  const [fechaRendicion, setFechaRendicion] = useState<string>(todayStr);
+  const [comisionCobro, setComisionCobro] = useState<number>(0);
+
+  // Control de apertura de Recibo Oficial Post-Cobro
+  const [reciboModalOpen, setReciboModalOpen] = useState(false);
+  const [idPagoRecibo, setIdPagoRecibo] = useState<number | null>(null);
+
   const nuevoMontoNominal = esObra
     ? Number((pisoBase * (1 + (Number(porcentaje) || 0) / 100)).toFixed(2))
     : Number(cuota.monto_actualizado || cuota.monto_base || 0);
 
   const saldoExigibleSugerido = Math.max(0, Number((nuevoMontoNominal - totalAbonado).toFixed(2)));
 
-  // Estados para disparar el Recibo Oficial tras cobro exitoso
-  const [reciboModalOpen, setReciboModalOpen] = useState(false);
-  const [idPagoRecibo, setIdPagoRecibo] = useState<number | null>(null);
-
-  // Inicialización de montos al abrir o cambiar la cuota
   useEffect(() => {
     if (cuota) {
       const pctInicial = Number(cuota.porcentaje_actualizacion || 0);
@@ -84,11 +96,17 @@ export const CobrarCuotaModal: React.FC<Props> = ({
       setFechaPago(todayStr);
       setMedioPago('TRANSFERENCIA');
       setComprobante('');
+      setCuentaBancaria('');
+      setFechaAcreditacion(todayStr);
       setNumeroCheque('');
       setBancoEmisor('');
       setCuitLibrador('');
       setFechaEmision(todayStr);
       setFechaCobro(todayStr);
+      setCanalCobro('');
+      setFechaCobroCliente(todayStr);
+      setFechaRendicion(todayStr);
+      setComisionCobro(0);
     }
   }, [cuota, pisoBase]);
 
@@ -106,19 +124,28 @@ export const CobrarCuotaModal: React.FC<Props> = ({
   const esParcial = montoIngresado > 0 && montoIngresado < saldoExigibleSugerido - 0.01;
   const montoExcedido = montoIngresado > saldoExigibleSugerido + 0.01;
 
-  // Validaciones específicas para Cheques y ECHEQs
+  // Validaciones condicionales
+  const esTransferencia = medioPago === 'TRANSFERENCIA';
   const esValor = medioPago === 'CHEQUE' || medioPago === 'ECHEQ';
+  const esExtrabancario = medioPago === 'PAGO_FACIL' || medioPago === 'RAPIPAGO';
+
   const cuitLibradorLimpio = cuitLibrador.replace(/\D/g, '');
   const cuitValido = !esValor || cuitLibradorLimpio.length === 11;
-  const fechasValidas = !esValor || (Boolean(fechaEmision) && Boolean(fechaCobro) && fechaCobro >= fechaEmision);
+  const fechasValoresValidas = !esValor || (Boolean(fechaEmision) && Boolean(fechaCobro) && fechaCobro >= fechaEmision);
   const datosValorValidos = !esValor || (
     numeroCheque.trim().length > 0 &&
     bancoEmisor.trim().length > 0 &&
     cuitValido &&
-    fechasValidas
+    fechasValoresValidas
   );
 
-  // Cálculo reactivo de caducidad (>30 días desde la fecha de cobro)
+  const datosExtrabancariosValidos = !esExtrabancario || (
+    canalCobro.trim().length > 0 &&
+    Boolean(fechaCobroCliente) &&
+    Boolean(fechaRendicion) &&
+    fechaRendicion >= fechaCobroCliente
+  );
+
   const diasTranscurridosCobro = (esValor && fechaCobro)
     ? Math.floor((new Date().getTime() - new Date(`${fechaCobro}T00:00:00`).getTime()) / (1000 * 60 * 60 * 24))
     : 0;
@@ -155,10 +182,19 @@ export const CobrarCuotaModal: React.FC<Props> = ({
       return;
     }
 
+    if (esExtrabancario && !datosExtrabancariosValidos) {
+      if (fechaRendicion < fechaCobroCliente) {
+        showToast('La fecha de rendición no puede ser anterior al cobro al cliente.', 'error');
+        return;
+      }
+      showToast('Por favor, indique la sucursal o canal de cobro extrabancario.', 'error');
+      return;
+    }
+
     try {
       setLoading(true);
 
-      const payload: Record<string, any> = {
+      const payload: RegistrarPagoPayload = {
         id_cuota: cuota.id_cuota,
         monto: montoIngresado,
         porcentaje_actualizacion: esObra
@@ -169,30 +205,33 @@ export const CobrarCuotaModal: React.FC<Props> = ({
         comprobante: comprobante.trim() || (esValor ? numeroCheque.trim() : undefined),
       };
 
-      if (esValor) {
+      if (esTransferencia) {
+        payload.cuenta_bancaria = cuentaBancaria;
+        payload.fecha_acreditacion = fechaAcreditacion;
+      } else if (esValor) {
         payload.numero_cheque = numeroCheque.trim();
         payload.banco_emisor = bancoEmisor.trim();
         payload.cuit_librador = cuitLibradorLimpio;
         payload.fecha_emision = fechaEmision;
         payload.fecha_cobro = fechaCobro;
+      } else if (esExtrabancario) {
+        payload.canal_cobro = canalCobro.trim();
+        payload.fecha_cobro_cliente = fechaCobroCliente;
+        payload.fecha_rendicion = fechaRendicion;
+        payload.comision_cobro = Number(comisionCobro) || 0;
       }
 
-      // Llamada limpia a través de la capa API
       const res = await registrarPago(payload as any);
-
-      // Captura defensiva del ID del pago según cómo lo devuelva el backend
-      const idPagoCreado = (res as any)?.id_pago || (res as any)?.data?.id_pago || (res as any)?.data?.id;
+      const idPagoCreado = (res as any)?.id_pago || (res as any)?.data?.id_pago;
 
       showToast(
         esParcial ? 'Pago parcial registrado con éxito' : 'Cobro cancelado en su totalidad',
         'success'
       );
 
-      // Notificamos para refrescar la grilla de cuotas y cuentas corrientes
       onSuccess();
       window.dispatchEvent(new CustomEvent('padron:actualizado'));
 
-      // Si obtuvimos el ID del pago, abrimos el modal del recibo oficial; si no, cerramos
       if (idPagoCreado) {
         setIdPagoRecibo(Number(idPagoCreado));
         setReciboModalOpen(true);
@@ -210,7 +249,7 @@ export const CobrarCuotaModal: React.FC<Props> = ({
   return (
     <>
       <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden flex flex-col max-h-[92vh]">
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[92vh]">
           {/* Cabecera */}
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <div className="flex items-center gap-3">
@@ -237,7 +276,7 @@ export const CobrarCuotaModal: React.FC<Props> = ({
 
           {/* Formulario */}
           <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
-            {/* Parámetro de Actualización Acumulativa (Solo RED_OBRA) */}
+            {/* Parámetro de Actualización Acumulativa */}
             {esObra && (
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
                 <div className="flex items-center justify-between">
@@ -249,32 +288,21 @@ export const CobrarCuotaModal: React.FC<Props> = ({
                     Piso base: ${pisoBase.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    step="0.01"
-                    disabled={tienePagosPrevios}
-                    readOnly={tienePagosPrevios}
-                    value={porcentaje}
-                    onChange={(e) => {
-                      if (tienePagosPrevios) return;
-                      handlePorcentajeChange(parseFloat(e.target.value) || 0);
-                    }}
-                    className={`w-full px-3 py-1.5 text-xs font-bold font-mono rounded-lg border outline-none transition ${
-                      tienePagosPrevios
-                        ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed select-none'
-                        : 'bg-white text-slate-900 border-slate-200 focus:border-brand-500 shadow-xs'
-                    }`}
-                  />
-                </div>
-
-                {/* Mensaje informativo si está bloqueado por cobro parcial */}
-                {tienePagosPrevios ? (
-                  <p className="text-[10px] text-slate-400 italic">
-                    Índice fijado por imputación parcial previa
-                  </p>
-                ) : null}
-
+                <input
+                  type="number"
+                  step="0.01"
+                  disabled={tienePagosPrevios}
+                  value={porcentaje}
+                  onChange={(e) => {
+                    if (tienePagosPrevios) return;
+                    handlePorcentajeChange(parseFloat(e.target.value) || 0);
+                  }}
+                  className={`w-full px-3 py-1.5 text-xs font-bold font-mono rounded-lg border outline-none transition ${
+                    tienePagosPrevios
+                      ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed select-none'
+                      : 'bg-white text-slate-900 border-slate-200 focus:border-brand-500 shadow-xs'
+                  }`}
+                />
                 <div className="text-[11px] text-slate-500 flex justify-between border-t border-slate-200/60 pt-1.5">
                   <span>Nuevo Valor Contractual:</span>
                   <span className="font-mono font-bold text-slate-800">
@@ -287,16 +315,13 @@ export const CobrarCuotaModal: React.FC<Props> = ({
             {/* Monto a Imputar */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-semibold text-slate-700">
-                  Monto a Imputar ($) *
-                </label>
+                <label className="text-xs font-semibold text-slate-700">Monto a Imputar ($) *</label>
                 <button
                   type="button"
                   onClick={() => setMontoAbonar(saldoExigibleSugerido)}
                   className="text-[11px] font-bold text-brand-600 hover:underline cursor-pointer"
                 >
-                  Pagar Total ($
-                  {saldoExigibleSugerido.toLocaleString('es-AR', { minimumFractionDigits: 2 })})
+                  Pagar Total (${saldoExigibleSugerido.toLocaleString('es-AR', { minimumFractionDigits: 2 })})
                 </button>
               </div>
               <div className="relative">
@@ -317,32 +342,23 @@ export const CobrarCuotaModal: React.FC<Props> = ({
                 />
               </div>
 
-              {/* Aviso de Remanente / Parcial */}
               {esParcial && (
                 <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 flex items-start gap-2 text-amber-800">
                   <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <div className="text-[11px]">
-                    <span className="font-bold">Aviso de Pago Parcial:</span> quedará un saldo remanente exigible de{' '}
+                    <span className="font-bold">Aviso de Pago Parcial:</span> quedará un saldo remanente de{' '}
                     <span className="font-mono font-bold">
                       ${remanentePosterior.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                 </div>
               )}
-
-              {montoExcedido && (
-                <p className="mt-1 text-[11px] font-medium text-rose-600">
-                  El monto no puede superar la deuda exigible ($
-                  {saldoExigibleSugerido.toLocaleString('es-AR', { minimumFractionDigits: 2 })}).
-                </p>
-              )}
             </div>
 
+            {/* Fecha y Medio de Pago */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Fecha de Pago *
-                </label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de Registro *</label>
                 <input
                   type="date"
                   value={fechaPago}
@@ -353,117 +369,124 @@ export const CobrarCuotaModal: React.FC<Props> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Medio de Pago *
-                </label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Medio de Pago *</label>
                 <select
                   value={medioPago}
-                  onChange={(e) => setMedioPago(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none transition"
+                  onChange={(e) => setMedioPago(e.target.value as MedioPago)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none transition font-medium"
                 >
-                  <option value="TRANSFERENCIA">Transferencia</option>
                   <option value="EFECTIVO">Efectivo</option>
+                  <option value="TRANSFERENCIA">Transferencia Bancaria</option>
                   <option value="CHEQUE">Cheque Físico</option>
                   <option value="ECHEQ">ECHEQ</option>
-                  <option value="DEBITO">Débito</option>
+                  <option value="PAGO_FACIL">Pago Fácil</option>
+                  <option value="RAPIPAGO">Rapipago</option>
                 </select>
               </div>
             </div>
 
-            {/* Bloque Condicional para Valores (Cheque Físico / ECHEQ) */}
+            {/* SECCIÓN CONDICIONAL 1: TRANSFERENCIA BANCARIA / QR */}
+            {esTransferencia && (
+              <div className="p-3.5 bg-blue-50/50 border border-blue-200 rounded-xl space-y-3 animate-in fade-in duration-150">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-blue-900 pb-1.5 border-b border-blue-200/60">
+                  <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Transferencia Bancaria / QR</span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Cuenta Bancaria Receptora / Destino *
+                  </label>
+                  <input
+                    type="text"
+                    value={cuentaBancaria}
+                    onChange={(e) => setCuentaBancaria(e.target.value)}
+                    placeholder="Ej: Banco Macro Cta Cte / Bancor / MP"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Fecha de Acreditación Efectiva *
+                  </label>
+                  <input
+                    type="date"
+                    value={fechaAcreditacion}
+                    onChange={(e) => setFechaAcreditacion(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* SECCIÓN CONDICIONAL 2: CHEQUES / ECHEQS */}
             {esValor && (
               <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3 animate-in fade-in duration-150">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 pb-1.5 border-b border-slate-200/70">
                   <FileCheck2 className="w-3.5 h-3.5 text-brand-600" />
                   <span>Datos del Valor ({medioPago === 'CHEQUE' ? 'Cheque Físico' : 'ECHEQ'})</span>
                 </div>
-
                 <div className="grid grid-cols-2 gap-2.5 text-xs">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                      N° Cheque / ID ECHEQ *
-                    </label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">N° Cheque / ID ECHEQ *</label>
                     <input
                       type="text"
                       value={numeroCheque}
                       onChange={(e) => setNumeroCheque(e.target.value)}
                       placeholder="Ej: 00489212"
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono focus:border-brand-500 outline-none text-xs"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono outline-none text-xs"
                       required
                     />
                   </div>
-
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                      Banco Emisor *
-                    </label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Banco Emisor *</label>
                     <input
                       type="text"
                       value={bancoEmisor}
                       onChange={(e) => setBancoEmisor(e.target.value)}
-                      placeholder="Ej: Banco de Córdoba"
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg focus:border-brand-500 outline-none text-xs"
+                      placeholder="Ej: Banco Macro"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg outline-none text-xs"
                       required
                     />
                   </div>
-
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                      CUIT Librador *
-                    </label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">CUIT Librador *</label>
                     <input
                       type="text"
                       maxLength={13}
                       value={cuitLibrador}
                       onChange={(e) => setCuitLibrador(e.target.value)}
                       placeholder="30-xxxxxxxx-x"
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono focus:border-brand-500 outline-none text-xs"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono outline-none text-xs"
                       required
                     />
-                    {!cuitValido && cuitLibrador.length > 0 && (
-                      <span className="text-[10px] text-rose-500 block mt-0.5">Debe contener 11 dígitos</span>
-                    )}
                   </div>
-
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                      Fecha Emisión *
-                    </label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Fecha Emisión *</label>
                     <input
                       type="date"
                       value={fechaEmision}
                       onChange={(e) => setFechaEmision(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg focus:border-brand-500 outline-none text-xs"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg outline-none text-xs"
                       required
                     />
                   </div>
-
                   <div className="col-span-2">
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                      Fecha de Cobro / Depósito *
-                    </label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Fecha de Cobro / Depósito *</label>
                     <input
                       type="date"
                       min={fechaEmision}
                       value={fechaCobro}
                       onChange={(e) => setFechaCobro(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg focus:border-brand-500 outline-none text-xs"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg outline-none text-xs"
                       required
                     />
-                    {fechaCobro < fechaEmision && (
-                      <span className="text-[10px] text-rose-500 block mt-0.5">La fecha no puede ser menor a emisión</span>
-                    )}
-
-                    {/* Banner reactivo de advertencia (no bloqueante) */}
                     {chequeVencidoBancariamente && (
-                      <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-300 flex items-start gap-2 text-amber-800 animate-in fade-in duration-150">
-                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <div className="text-[11px] leading-relaxed">
-                          <span className="font-bold">Advertencia de Caducidad Bancaria:</span> Han transcurrido{' '}
-                          <strong className="font-mono font-bold">{diasTranscurridosCobro} días</strong> desde la fecha de cobro.
-                          El plazo de vigencia bancaria estándar (30 días) ha expirado. Si confirma, este valor ingresará directamente en estado{' '}
-                          <span className="font-bold text-rose-700 bg-rose-50 px-1 py-0.5 rounded border border-rose-200">VENCIDO</span> a la cartera de custodia.
-                        </div>
+                      <div className="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-300 text-amber-800 text-[11px]">
+                        <strong>Advertencia:</strong> Han transcurrido {diasTranscurridosCobro} días. Ingresará como <strong>VENCIDO</strong>.
                       </div>
                     )}
                   </div>
@@ -471,19 +494,87 @@ export const CobrarCuotaModal: React.FC<Props> = ({
               </div>
             )}
 
+            {/* SECCIÓN CONDICIONAL 3: EXTRABANCARIOS (PAGO FÁCIL / RAPIPAGO) */}
+            {esExtrabancario && (
+              <div className="p-3.5 bg-amber-50/40 border border-amber-200 rounded-xl space-y-3 animate-in fade-in duration-150">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900 pb-1.5 border-b border-amber-200">
+                  <Store className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Datos de Rendición Extrabancaria ({medioPago === 'PAGO_FACIL' ? 'Pago Fácil' : 'Rapipago'})</span>
+                </div>
+                <div className="space-y-2.5 text-xs">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Canal / Sucursal de Cobro *</label>
+                    <input
+                      type="text"
+                      value={canalCobro}
+                      onChange={(e) => setCanalCobro(e.target.value)}
+                      placeholder="Ej: Terminal 044 - Sucursal Centro"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-amber-500 text-xs"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">Fecha Cobro Cliente *</label>
+                      <input
+                        type="date"
+                        value={fechaCobroCliente}
+                        onChange={(e) => setFechaCobroCliente(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg outline-none text-xs"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">Fecha Rendición / Depósito *</label>
+                      <input
+                        type="date"
+                        min={fechaCobroCliente}
+                        value={fechaRendicion}
+                        onChange={(e) => setFechaRendicion(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg outline-none text-xs"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Comisión de la Red ($)</label>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1.5 text-xs text-slate-400 font-bold">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={comisionCobro}
+                        onChange={(e) => setComisionCobro(parseFloat(e.target.value) || 0)}
+                        placeholder="0.00"
+                        className="w-full pl-6 pr-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono text-xs outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Referencia o Comprobante */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Nº de Comprobante / Ref. de Pago
+                {esTransferencia
+                  ? 'N° de Referencia de Transacción / Comprobante *'
+                  : esExtrabancario
+                  ? 'N° de Transacción / Comprobante de Red *'
+                  : 'N° de Comprobante / Ref. de Pago'}
               </label>
               <input
                 type="text"
                 value={comprobante}
                 onChange={(e) => setComprobante(e.target.value)}
-                placeholder={esValor ? "Opcional (se asocia N° cheque)" : "Ej. REC-2026-0045"}
+                placeholder={esTransferencia ? 'Ej. TRX-884920 o Código QR' : esValor ? 'Opcional (se asocia N° cheque)' : 'Ej. TX-984421'}
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none transition"
+                required={esTransferencia || esExtrabancario}
               />
             </div>
 
+            {/* Botones de acción */}
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
               <button
                 type="button"
@@ -494,11 +585,9 @@ export const CobrarCuotaModal: React.FC<Props> = ({
               </button>
               <button
                 type="submit"
-                disabled={loading || montoIngresado <= 0 || montoExcedido || (esValor && !datosValorValidos)}
+                disabled={loading || montoIngresado <= 0 || montoExcedido || (esValor && !datosValorValidos) || (esExtrabancario && !datosExtrabancariosValidos)}
                 className={`inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition disabled:opacity-50 cursor-pointer ${
-                  esParcial
-                    ? 'bg-amber-600 hover:bg-amber-700'
-                    : 'bg-emerald-600 hover:bg-emerald-700'
+                  esParcial ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'
                 }`}
               >
                 {loading ? (
@@ -516,7 +605,6 @@ export const CobrarCuotaModal: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Recibo Oficial Modal: se abre inmediatamente con el ID del pago creado */}
       {idPagoRecibo && (
         <ReciboOficialModal
           isOpen={reciboModalOpen}
@@ -524,7 +612,7 @@ export const CobrarCuotaModal: React.FC<Props> = ({
           onClose={() => {
             setReciboModalOpen(false);
             setIdPagoRecibo(null);
-            onClose(); // Cierra definitivamente el modal de cobro
+            onClose();
           }}
         />
       )}

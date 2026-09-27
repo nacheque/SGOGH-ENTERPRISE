@@ -1,8 +1,12 @@
+import type { PagoResponseDTO } from './pagos.types';
+
+// Reexportamos para retrocompatibilidad total
+export type { MedioPago, CreatePagoDTO, PagoResponseDTO, ChequeCarteraDTO, CreatePagoConChequeDTO } from './pagos.types';
+
 // ==========================================
-// INTERFACES DE CUOTAS Y PAGOS
+// INTERFACES DE CUOTAS
 // ==========================================
 export type EstadoCuota = 'PENDIENTE' | 'PAGADA' | 'PAGO_PARCIAL' | 'VENCIDA';
-export type MedioPago = 'EFECTIVO' | 'TRANSFERENCIA' | 'CHEQUE' | 'ECHEQ' | 'SIRO_ROELA' | string;
 
 export interface Cuota {
   id_cuota: number;
@@ -22,26 +26,6 @@ export interface Cuota {
   indice_aplicado?: number;
   porcentaje_mensual?: number;
   estado: EstadoCuota;
-}
-
-export interface CreatePagoDTO {
-  id_cuota: number;
-  monto: number;
-  porcentaje_actualizacion?: number;
-  fecha_pago?: string | null; // 'YYYY-MM-DD'
-  medio_pago: MedioPago;
-  comprobante?: string | null;
-  observaciones?: string | null;
-}
-
-export interface PagoResponseDTO {
-  id_pago: number;
-  id_cuota: number;
-  monto: string | number;
-  fecha_pago: string;
-  medio_pago: string;
-  comprobante: string | null;
-  observaciones?: string | null;
 }
 
 export interface CuotaConPagoDTO extends Cuota {
@@ -75,45 +59,4 @@ export interface RegistroIndiceResultadoDTO {
   indice: IndiceActualizacionResponseDTO;
   cuotas_actualizadas: number;
   mensaje: string;
-}
-
-// ==========================================
-// CARTERA DE CHEQUES Y ECHEQS
-// ==========================================
-
-export interface ChequeCarteraDTO {
-  id_pago: number;
-  id_cuota: number;
-  monto: number;
-  fecha_pago: string;
-  medio_pago: 'CHEQUE' | 'ECHEQ';
-  numero_cheque: string;
-  banco_emisor: string;
-  cuit_librador: string;
-  fecha_emision: string;
-  fecha_cobro: string;
-  comprobante: string | null;
-  nro_cuota: number;
-  concepto: string;
-  id_inmueble: number;
-  clave_cliente: string;
-  calle: string;
-  numero: string | null;
-  manzana: string | null;
-  lote: string | null;
-  id_obra: number;
-  obra_nombre: string;
-  titular_nombre: string;
-  titular_cuit: string | null;
-  estado_custodia: 'EN_CARTERA' | 'DISPONIBLE' | 'VENCIDO';
-  dias_para_cobro: number;
-}
-
-// Extensión para pagos mediante valores (Cheque físico o ECHEQ)
-export interface CreatePagoConChequeDTO extends CreatePagoDTO {
-  numero_cheque: string;
-  banco_emisor: string;
-  cuit_librador: string;
-  fecha_emision: string;
-  fecha_cobro: string;
 }
