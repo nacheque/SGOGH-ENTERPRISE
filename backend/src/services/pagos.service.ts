@@ -1,5 +1,5 @@
 import { PagosRepository } from '../repositories/pagos.repository';
-import { CreatePagoDTO, PagoResponseDTO, CuotaConPagoDTO, ChequeCarteraDTO, ReciboDatosDTO } from '../types/pagos.types';
+import { CreatePagoDTO, PagoResponseDTO, CuotaConPagoDTO, ChequeCarteraDTO, ReciboDatosDTO, RegistrarPagoPayload, PagoDetalleDTO } from '../types/pagos.types';
 
 export class PagosService {
   private pagosRepo: PagosRepository;
@@ -8,7 +8,7 @@ export class PagosService {
     this.pagosRepo = new PagosRepository();
   }
 
-  async procesarPago(dto: CreatePagoDTO): Promise<PagoResponseDTO> {
+async procesarPago(dto: CreatePagoDTO): Promise<PagoResponseDTO> {
     if (!dto.id_cuota || dto.monto === undefined || !dto.medio_pago) {
       throw new Error('Faltan campos obligatorios: id_cuota, monto y medio_pago son requeridos.');
     }
@@ -17,8 +17,10 @@ export class PagosService {
       throw new Error('El monto pagado debe ser mayor a 0.');
     }
 
-    const medio = (dto.medio_pago || '').toUpperCase();
-    // Validación estricta para valores (Cheques físicos y ECHEQs)
+    const medio = (dto.medio_pago || '').toUpperCase().trim();
+    const regexFecha = /^\d{4}-\d{2}-\d{2}$/;
+
+    // 1. Validación estricta para valores (Cheques físicos y ECHEQs)
     if (medio === 'CHEQUE' || medio === 'ECHEQ') {
       if (!dto.numero_cheque || dto.numero_cheque.trim() === '') {
         throw new Error('El campo numero_cheque es obligatorio para pagos con CHEQUE o ECHEQ.');
@@ -35,7 +37,6 @@ export class PagosService {
       dto.cuit_librador = cuitLimpio;
 
       // Validar formato de fechas (YYYY-MM-DD)
-      const regexFecha = /^\d{4}-\d{2}-\d{2}$/;
       if (!dto.fecha_emision || !regexFecha.test(dto.fecha_emision)) {
         throw new Error('El campo fecha_emision es obligatorio y debe tener formato YYYY-MM-DD.');
       }
@@ -49,11 +50,44 @@ export class PagosService {
       }
     }
 
+    // 2. Validación y normalización para Transferencias Bancarias
+    if (medio === 'TRANSFERENCIA') {
+      if (dto.fecha_acreditacion && !regexFecha.test(dto.fecha_acreditacion)) {
+        throw new Error('El campo fecha_acreditacion debe tener formato YYYY-MM-DD.');
+      }
+    }
+
+    // 3. Validación y normalización para Redes de Recaudación (Pago Fácil / Rapipago)
+    let comisionCobro = 0;
+    if (medio === 'PAGO_FACIL' || medio === 'RAPIPAGO') {
+      if (dto.comision_cobro !== undefined && dto.comision_cobro !== null) {
+        comisionCobro = Number(dto.comision_cobro);
+        if (isNaN(comisionCobro) || comisionCobro < 0) {
+          throw new Error('La comision_cobro debe ser un valor numérico positivo o cero.');
+        }
+      }
+
+      if (dto.fecha_cobro_cliente && !regexFecha.test(dto.fecha_cobro_cliente)) {
+        throw new Error('El campo fecha_cobro_cliente debe tener formato YYYY-MM-DD.');
+      }
+      if (dto.fecha_rendicion && !regexFecha.test(dto.fecha_rendicion)) {
+        throw new Error('El campo fecha_rendicion debe tener formato YYYY-MM-DD.');
+      }
+
+      // Coherencia temporal: la rendición no puede ser anterior al cobro en ventanilla
+      if (dto.fecha_cobro_cliente && dto.fecha_rendicion) {
+        if (new Date(dto.fecha_rendicion) < new Date(dto.fecha_cobro_cliente)) {
+          throw new Error('La fecha_rendicion no puede ser anterior a la fecha_cobro_cliente.');
+        }
+      }
+    }
+
     return await this.pagosRepo.registrarPagoTransaccional({
       ...dto,
       id_cuota: Number(dto.id_cuota),
       monto: Number(dto.monto),
-      medio_pago: dto.medio_pago.toUpperCase().trim(),
+      medio_pago: medio as any,
+      comision_cobro: comisionCobro,
       porcentaje_actualizacion:
         dto.porcentaje_actualizacion !== undefined && dto.porcentaje_actualizacion !== null
           ? Number(dto.porcentaje_actualizacion)

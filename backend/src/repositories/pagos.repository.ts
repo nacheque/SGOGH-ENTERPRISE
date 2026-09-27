@@ -2,7 +2,7 @@ import { pool } from '../config/database';
 import { PoolClient } from 'pg';
 import { CreatePagoDTO, PagoResponseDTO, CuotaConPagoDTO, ChequeCarteraDTO } from '../types/pagos.types';
 import { EstadoCuota } from '../types/contratos.types';
-import { ReciboRawRow } from '../types/pagos.types';
+import { ReciboRawRow, RegistrarPagoPayload, PagoDetalleDTO } from '../types/pagos.types';
 
 export class PagosRepository {
   /**
@@ -43,7 +43,7 @@ export class PagosRepository {
     try {
       await client.query('BEGIN');
 
-      // 1. Bloqueo exclusivo de la cuota (SIN agregaciones ni GROUP BY)
+      // 1. Bloqueo exclusivo de la cuota
       const cuotaQuery = `
         SELECT 
           id_cuota, 
@@ -72,7 +72,7 @@ export class PagosRepository {
         throw new Error(`La cuota #${data.id_cuota} ya se encuentra registrada como PAGADA.`);
       }
 
-      // 2. Obtener acumulado histórico abonado en consulta separada
+      // 2. Obtener acumulado histórico abonado
       const pagosRes = await client.query(
         `SELECT COALESCE(SUM(monto), 0) AS total_pagado 
          FROM pagos 
@@ -113,7 +113,7 @@ export class PagosRepository {
         );
       }
 
-      // 4. Insertar comprobante de pago
+      // 4. Insertar comprobante de pago con conciliación multicanal
       const fechaPagoFinal = data.fecha_pago || new Date().toISOString().split('T')[0];
       const insertPagoQuery = `
         INSERT INTO pagos (
@@ -126,22 +126,36 @@ export class PagosRepository {
           banco_emisor,
           cuit_librador,
           fecha_emision,
-          fecha_cobro
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          fecha_cobro,
+          cuenta_bancaria,
+          fecha_acreditacion,
+          canal_cobro,
+          fecha_cobro_cliente,
+          fecha_rendicion,
+          comision_cobro
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+        )
         RETURNING *;
       `;
 
       const values = [
-        data.id_cuota,               // $1
-        montoAPagar,                 // $2
-        fechaPagoFinal,              // $3
-        data.medio_pago,             // $4
-        data.comprobante ?? null,    // $5
-        data.numero_cheque ?? null,  // $6
-        data.banco_emisor ?? null,   // $7
-        data.cuit_librador ?? null,  // $8
-        data.fecha_emision ?? null,  // $9
-        data.fecha_cobro ?? null,    // $10
+        data.id_cuota,
+        montoAPagar,
+        fechaPagoFinal,
+        data.medio_pago,
+        data.comprobante ?? null,
+        data.numero_cheque ?? null,
+        data.banco_emisor ?? null,
+        data.cuit_librador ?? null,
+        data.fecha_emision ?? null,
+        data.fecha_cobro ?? null,
+        data.cuenta_bancaria ?? null,
+        data.fecha_acreditacion ?? null,
+        data.canal_cobro ?? null,
+        data.fecha_cobro_cliente ?? null,
+        data.fecha_rendicion ?? null,
+        data.comision_cobro && data.comision_cobro > 0 ? Number(data.comision_cobro) : 0,
       ];
 
       const pagoRes = await client.query(insertPagoQuery, values);
