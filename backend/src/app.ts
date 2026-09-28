@@ -3,12 +3,18 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { errorHandler } from './middlewares/errorHandler';
 import router from './routes';
+import { UsuariosRepository } from './repositories/usuarios.repository';
+import { seedAdmin } from './utils/seedAdmin';
 
 // Cargar variables de entorno (.env)
 dotenv.config();
 
 const app: Application = express();
 const PORT = process.env.PORT || 3000;
+
+// Inicialización del usuario administrador por defecto
+const usuariosRepo = new UsuariosRepository();
+seedAdmin(usuariosRepo);
 
 // 1. Middlewares Globales
 app.use(cors()); // Habilita peticiones desde el Frontend
