@@ -28,7 +28,7 @@ export const InmuebleForm: React.FC<Props> = ({ obras, personas, onSubmit }) => 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.clave_cliente || !formData.id_obra || !formData.calle || formData.metros_frente <= 0) {
+    if (!formData.clave_cliente || !formData.id_obra || !formData.calle || Number(formData.metros_frente) <= 0) {
       alert('Por favor complete la Clave, Obra, Calle y Metros de Frente.');
       return;
     }
@@ -71,7 +71,7 @@ export const InmuebleForm: React.FC<Props> = ({ obras, personas, onSubmit }) => 
             type="text"
             required
             placeholder="Ej. OBRA1-0012"
-            value={formData.clave_cliente}
+            value={formData.clave_cliente ?? ''}
             onChange={(e) => setFormData({ ...formData, clave_cliente: e.target.value })}
             className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none focus:border-brand-500"
           />

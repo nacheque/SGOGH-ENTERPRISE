@@ -8,16 +8,28 @@ interface Props {
   onSuccess: () => void;
 }
 
+// Tipo específico para el estado del formulario visual
+interface FormState {
+  nombre_obra: string;
+  ubicacion: string;
+  anio: number;
+  precio_x_metro: number;
+  costo_gabinete: number;
+  estado: 'ACTIVA';
+}
+
+const initialFormState: FormState = {
+  nombre_obra: '',
+  ubicacion: '',
+  anio: new Date().getFullYear(),
+  precio_x_metro: 0,
+  costo_gabinete: 0,
+  estado: 'ACTIVA',
+};
+
 export const NuevaObraModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => {
   const [submitting, setSubmitting] = useState(false);
-  const [formData, setFormData] = useState<CreateObraDTO>({
-    nombre_obra: '',
-    ubicacion: '',
-    anio: new Date().getFullYear(),
-    precio_x_metro: 0,
-    costo_gabinete: 0,
-    estado: 'ACTIVA',
-  });
+  const [formData, setFormData] = useState<FormState>(initialFormState);
 
   if (!isOpen) return null;
 
@@ -25,15 +37,19 @@ export const NuevaObraModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) 
     e.preventDefault();
     try {
       setSubmitting(true);
-      await createObra(formData);
-      setFormData({
-        nombre_obra: '',
-        ubicacion: '',
-        anio: new Date().getFullYear(),
-        precio_x_metro: 0,
-        costo_gabinete: 0,
-        estado: 'ACTIVA',
-      });
+
+      // Adaptador limpio hacia CreateObraDTO para satisfacer a TypeScript
+      const payload: CreateObraDTO = {
+        nombre_obra: formData.nombre_obra.trim(),
+        descripcion: formData.ubicacion.trim() ? `Ubicación: ${formData.ubicacion.trim()}` : undefined,
+        fecha_inicio: `${formData.anio}-01-01`,
+        precio_x_metro: formData.precio_x_metro,
+        costo_gabinete: formData.costo_gabinete,
+        estado: formData.estado,
+      };
+
+      await createObra(payload);
+      setFormData(initialFormState);
       onSuccess();
       onClose();
     } catch (err) {

@@ -2,7 +2,6 @@ import React, { useState, useRef } from 'react';
 import type {
   ConciliacionItemDTO,
   ConciliacionSummaryDTO,
-  EstadoConciliacion,
 } from '../../types/conciliaciones.types';
 import { conciliacionesApi } from '../../api/conciliaciones.api';
 import {

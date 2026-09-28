@@ -1,7 +1,7 @@
 // ==========================================
 // MÓDULO DE OBRAS
 // ==========================================
-export type EstadoObra = 'PLANIFICADA' | 'EN_PROGRESO' | 'FINALIZADA' | 'PAUSADA';
+export type EstadoObra = 'ACTIVA' | 'PLANIFICADA' | 'EN_PROGRESO' | 'FINALIZADA' | 'PAUSADA';
 
 export interface Obra {
   id_obra: number;
