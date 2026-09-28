@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import type {
   Obra,
   Inmueble,
@@ -22,12 +23,28 @@ import { ImportarRoelaModal } from '../components/finanzas/ImportarRoelaModal';
 import { ImportarPlanesModal } from '../components/finanzas/ImportarPlanesModal';
 
 interface Props {
-  showToast: (msg: string, type: 'success' | 'error') => void;
+  showToast?: (msg: string, type: 'success' | 'error') => void;
+}
+
+interface OutletContextType {
+  showToast?: (msg: string, type?: 'success' | 'error') => void;
 }
 
 type TabType = 'dashboard' | 'cuenta_corriente' | 'gestion_obras';
 
-export const FinanzasView: React.FC<Props> = ({ showToast }) => {
+export const FinanzasView: React.FC<Props> = ({ showToast: showToastProp }) => {
+  // Soporta showToast tanto por prop directa como a través de useOutletContext del MainLayout
+  const outletCtx = useOutletContext<OutletContextType>();
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    if (showToastProp) {
+      showToastProp(msg, type);
+    } else if (outletCtx?.showToast) {
+      outletCtx.showToast(msg, type);
+    } else {
+      console.log(`[Toast ${type}]: ${msg}`);
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [obras, setObras] = useState<Obra[]>([]);
   const [selectedObraId, setSelectedObraId] = useState<number | null>(null);
