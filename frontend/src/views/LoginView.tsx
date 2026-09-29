@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Mail, Lock, Eye, EyeOff, Loader2, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import axios from 'axios';
+import logoCecsa from '../assets/recibos/logo-cecsa.jpg';
 
 export const LoginView: React.FC = () => {
   const { login, isAuthenticated } = useAuth();
@@ -63,15 +64,25 @@ export const LoginView: React.FC = () => {
       <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-3xl p-8 shadow-2xl backdrop-blur-md">
-        {/* Cabecera CECSA */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-brand-600/20 text-brand-400 border border-brand-500/30 mb-3">
-            <ShieldCheck className="w-6 h-6" />
+        {/* Cabecera CECSA con Logo Oficial y Título SGOGH Estilizado */}
+        <div className="text-center mb-8 flex flex-col items-center">
+          <div className="p-3 bg-white rounded-2xl shadow-xl shadow-brand-500/10 border border-slate-200/80 mb-5 inline-flex items-center justify-center">
+            <img
+              src={logoCecsa}
+              alt="Logo CECSA"
+              className="h-11 w-auto object-contain rounded-lg"
+            />
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tight">CECSA</h1>
-          <p className="text-xs uppercase tracking-widest text-slate-400 font-bold mt-1">
-            SG Administración, Finanzas y Obras
-          </p>
+
+          <div className="space-y-1">
+            <h1 className="text-2xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-100 to-slate-300 font-mono">
+              SGOGH
+            </h1>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-800/80 border border-slate-700/60 text-[10px] font-semibold text-slate-400 tracking-wide uppercase">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Gestión de Obras y Finanzas
+            </div>
+          </div>
         </div>
 
         {/* Mensaje de Error */}
@@ -120,7 +131,7 @@ export const LoginView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setMostrarPassword(!mostrarPassword)}
-                className="absolute right-3.5 top-3 text-slate-500 hover:text-slate-300 transition"
+                className="absolute right-3.5 top-3 text-slate-500 hover:text-slate-300 transition cursor-pointer"
               >
                 {mostrarPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>

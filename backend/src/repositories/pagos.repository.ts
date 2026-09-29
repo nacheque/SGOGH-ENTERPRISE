@@ -1,6 +1,12 @@
 import { pool } from '../config/database';
 import { PoolClient } from 'pg';
-import { CreatePagoDTO, PagoResponseDTO, CuotaConPagoDTO, ChequeCarteraDTO } from '../types/pagos.types';
+import { CreatePagoDTO, 
+  PagoResponseDTO, 
+  CuotaConPagoDTO, 
+  ChequeCarteraDTO, 
+  EstadoCheque,
+  ChequeActualizadoResponseDTO
+} from '../types/pagos.types';
 import { EstadoCuota } from '../types/contratos.types';
 import { ReciboRawRow, RegistrarPagoPayload, PagoDetalleDTO } from '../types/pagos.types';
 
@@ -366,6 +372,8 @@ export class PagosRepository {
         p.cuit_librador,
         TO_CHAR(p.fecha_emision, 'YYYY-MM-DD') AS fecha_emision,
         TO_CHAR(p.fecha_cobro, 'YYYY-MM-DD') AS fecha_cobro,
+        TO_CHAR(p.fecha_deposito, 'YYYY-MM-DD') AS fecha_deposito,
+        COALESCE(p.estado_cheque, 'CARTERA') AS estado_cheque,
         p.comprobante,
         c.nro_cuota,
         c.concepto,
@@ -460,5 +468,60 @@ export class PagosRepository {
 
     const { rows } = await pool.query(query, [idPago]);
     return rows.length > 0 ? rows[0] : null;
+  }
+
+  /**
+   * Obtiene los datos base de un cheque por id_pago para validar tipo y estado previo
+   */
+  async buscarChequePorId(idPago: number): Promise<{
+    id_pago: number;
+    medio_pago: string;
+    estado: EstadoCheque;
+  } | null> {
+    const query = `
+      SELECT 
+        id_pago,
+        medio_pago,
+        COALESCE(estado_cheque, 'CARTERA') AS estado
+      FROM pagos
+      WHERE id_pago = $1;
+    `;
+    const { rows } = await pool.query(query, [idPago]);
+    return rows[0] || null;
+  }
+
+  /**
+   * Actualiza el estado operativo del cheque/echeq (ej: DEPOSITADO, COBRADO)
+   */
+  async actualizarEstadoCheque(
+    idPago: number,
+    nuevoEstado: EstadoCheque,
+    fechaDeposito?: string
+  ): Promise<ChequeActualizadoResponseDTO> {
+    const query = `
+      UPDATE pagos
+      SET 
+        estado_cheque = $1,
+        fecha_deposito = CASE 
+          WHEN $1 = 'DEPOSITADO' THEN COALESCE($2::date, CURRENT_DATE)
+          ELSE fecha_deposito 
+        END
+      WHERE id_pago = $3
+      RETURNING 
+        id_pago,
+        id_cuota,
+        monto::float AS monto,
+        medio_pago,
+        numero_cheque,
+        banco_emisor,
+        cuit_librador,
+        TO_CHAR(fecha_emision, 'YYYY-MM-DD') AS fecha_emision,
+        TO_CHAR(fecha_cobro, 'YYYY-MM-DD') AS fecha_cobro,
+        TO_CHAR(fecha_deposito, 'YYYY-MM-DD') AS fecha_deposito,
+        COALESCE(estado_cheque, $1) AS estado;
+    `;
+    const values = [nuevoEstado, fechaDeposito || null, idPago];
+    const { rows } = await pool.query<ChequeActualizadoResponseDTO>(query, values);
+    return rows[0];
   }
 }

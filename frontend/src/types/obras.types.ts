@@ -6,21 +6,25 @@ export type EstadoObra = 'ACTIVA' | 'PLANIFICADA' | 'EN_PROGRESO' | 'FINALIZADA'
 export interface Obra {
   id_obra: number;
   nombre_obra: string;
-  descripcion?: string;
+  ubicacion?: string;
+  anio?: number;
   precio_x_metro: number;
   costo_gabinete: number;
   fecha_inicio?: string;
   estado: EstadoObra;
   created_at?: string;
+  descripcion?: string;
 }
 
 export interface CreateObraDTO {
   nombre_obra: string;
-  descripcion?: string;
+  ubicacion?: string;
+  anio?: number;
   precio_x_metro: number;
   costo_gabinete?: number;
   fecha_inicio?: string;
   estado?: EstadoObra;
+  descripcion?: string;
 }
 
 // DTO del Padrón Consolidado que devuelve getPadronByObra

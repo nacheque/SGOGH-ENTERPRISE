@@ -2,8 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { PagosService } from '../services/pagos.service';
 
 export class PagosController {
-
   private pagosService: PagosService;
+
   constructor() {
     this.pagosService = new PagosService();
   }
@@ -66,6 +66,40 @@ export class PagosController {
     } catch (error: any) {
       if (error.statusCode === 404 || error.message === 'Pago no encontrado') {
         res.status(404).json({ error: 'Pago no encontrado' });
+        return;
+      }
+      next(error);
+    }
+  };
+
+  actualizarEstadoCheque = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const idPago = Number(req.params.id);
+
+      if (isNaN(idPago) || idPago <= 0) {
+        res.status(400).json({ status: 'error', message: 'El ID del cheque debe ser un número entero positivo válido' });
+        return;
+      }
+
+      const { estado, fecha_deposito } = req.body;
+
+      const chequeActualizado = await this.pagosService.actualizarEstadoCheque(
+        idPago,
+        estado,
+        fecha_deposito
+      );
+
+      res.status(200).json({
+        status: 'success',
+        data: chequeActualizado,
+      });
+    } catch (error: any) {
+      if (error.statusCode === 404) {
+        res.status(404).json({ status: 'error', message: error.message });
+        return;
+      }
+      if (error.statusCode === 400) {
+        res.status(400).json({ status: 'error', message: error.message });
         return;
       }
       next(error);

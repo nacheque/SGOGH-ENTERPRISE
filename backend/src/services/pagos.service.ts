@@ -1,5 +1,15 @@
 import { PagosRepository } from '../repositories/pagos.repository';
-import { CreatePagoDTO, PagoResponseDTO, CuotaConPagoDTO, ChequeCarteraDTO, ReciboDatosDTO, RegistrarPagoPayload, PagoDetalleDTO } from '../types/pagos.types';
+import { 
+  CreatePagoDTO, 
+  PagoResponseDTO, 
+  CuotaConPagoDTO, 
+  ChequeCarteraDTO, 
+  ReciboDatosDTO, 
+  RegistrarPagoPayload, 
+  PagoDetalleDTO,
+  EstadoCheque,
+  ChequeActualizadoResponseDTO 
+} from '../types/pagos.types';
 
 export class PagosService {
   private pagosRepo: PagosRepository;
@@ -8,7 +18,7 @@ export class PagosService {
     this.pagosRepo = new PagosRepository();
   }
 
-async procesarPago(dto: CreatePagoDTO): Promise<PagoResponseDTO> {
+  async procesarPago(dto: CreatePagoDTO): Promise<PagoResponseDTO> {
     if (!dto.id_cuota || dto.monto === undefined || !dto.medio_pago) {
       throw new Error('Faltan campos obligatorios: id_cuota, monto y medio_pago son requeridos.');
     }
@@ -185,5 +195,68 @@ async procesarPago(dto: CreatePagoDTO): Promise<PagoResponseDTO> {
       detalle_medio_pago: detalleMedioPago,
       nomenclatura_lote: nomenclaturaLote,
     };
+  }
+
+  /**
+   * Actualiza el estado operativo de un cheque/echeq (ej: DEPOSITADO, COBRADO)
+   */
+  async actualizarEstadoCheque(
+    idPago: number,
+    nuevoEstado: EstadoCheque,
+    fechaDeposito?: string
+  ): Promise<ChequeActualizadoResponseDTO> {
+    if (!idPago || isNaN(idPago) || idPago <= 0) {
+      const error: any = new Error('El ID de pago debe ser un entero positivo válido');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (!nuevoEstado) {
+      const error: any = new Error('El campo estado es requerido');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const chequeExistente = await this.pagosRepo.buscarChequePorId(idPago);
+    if (!chequeExistente) {
+      const error: any = new Error(`No se encontró el cheque o pago con ID ${idPago}`);
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (chequeExistente.medio_pago !== 'CHEQUE' && chequeExistente.medio_pago !== 'ECHEQ') {
+      const error: any = new Error(
+        `El pago con ID ${idPago} no corresponde a un valor en cartera (medio: ${chequeExistente.medio_pago})`
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const transicionesPermitidas: Record<EstadoCheque, EstadoCheque[]> = {
+      CARTERA: ['DEPOSITADO', 'ANULADO', 'RECHAZADO'],
+      PENDIENTE: ['DEPOSITADO', 'ANULADO', 'RECHAZADO'], // <--- Agregada
+      DEPOSITADO: ['COBRADO', 'RECHAZADO'],
+      COBRADO: [],
+      RECHAZADO: ['ANULADO'],
+      ANULADO: [],
+    };
+
+    const estadoActual = chequeExistente.estado;
+
+    // Idempotencia: si ya está en ese estado, retornamos el registro directamente
+    if (estadoActual === nuevoEstado) {
+      return await this.pagosRepo.actualizarEstadoCheque(idPago, nuevoEstado, fechaDeposito);
+    }
+
+    const permitidos = transicionesPermitidas[estadoActual] || [];
+    if (!permitidos.includes(nuevoEstado)) {
+      const error: any = new Error(
+        `Transición no permitida: no se puede cambiar el cheque de '${estadoActual}' a '${nuevoEstado}'`
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return await this.pagosRepo.actualizarEstadoCheque(idPago, nuevoEstado, fechaDeposito);
   }
 }

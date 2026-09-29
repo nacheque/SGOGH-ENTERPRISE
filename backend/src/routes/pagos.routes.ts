@@ -6,6 +6,9 @@ const router = Router();
 router.post('/', pagosController.createPago);
 router.get('/cartera-cheques', (req, res, next) => pagosController.getCarteraCheques(req, res, next));
 
+// PATCH /api/v1/pagos/cheques/:id/estado
+router.patch('/cheques/:id/estado', pagosController.actualizarEstadoCheque);
+
 // GET /api/v1/pagos/:id_pago/recibo-datos
 router.get('/:id_pago/recibo-datos', pagosController.getReciboDatos);
 

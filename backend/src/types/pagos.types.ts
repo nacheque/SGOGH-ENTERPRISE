@@ -15,8 +15,7 @@ export type MedioPago =
 
 export type MedioPagoCheque = 'CHEQUE' | 'ECHEQ';
 
-export type EstadoCustodiaCheque = 'EN_CARTERA' | 'DISPONIBLE' | 'VENCIDO';
-
+export type EstadoCheque = 'CARTERA' | 'PENDIENTE' | 'DEPOSITADO' | 'COBRADO' | 'RECHAZADO' | 'ANULADO';
 // ==========================================
 // DTOs para Creación y Registro de Pagos
 // ==========================================
@@ -130,8 +129,27 @@ export interface ChequeCarteraDTO {
   obra_nombre: string;
   titular_nombre: string | null;
   titular_cuit: string | null;
-  estado_custodia: EstadoCustodiaCheque;
+  estado_custodia: EstadoCheque;
   dias_para_cobro: number;
+}
+
+export interface ActualizarEstadoChequeDTO {
+  estado: EstadoCheque;
+  fecha_deposito?: string;
+}
+
+export interface ChequeActualizadoResponseDTO {
+  id_pago: number;
+  id_cuota: number;
+  monto: number;
+  medio_pago: MedioPagoCheque;
+  numero_cheque: string | null;
+  banco_emisor: string | null;
+  cuit_librador: string | null;
+  fecha_emision: string | null;
+  fecha_cobro: string | null;
+  estado: EstadoCheque;
+  fecha_deposito?: string | null;
 }
 
 // ==========================================

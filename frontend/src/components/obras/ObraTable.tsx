@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Obra } from '../../types/obras.types';
+import { Eye } from 'lucide-react';
 
 interface Props {
   obras: Obra[];
@@ -24,8 +25,8 @@ export const ObraTable: React.FC<Props> = ({ obras, loading, selectedObraId, onS
           <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500 font-bold bg-slate-50">
             <th className="px-4 py-3.5">ID</th>
             <th className="px-4 py-3.5">Nombre de la Obra</th>
-            <th className="px-4 py-3.5">Descripción</th>
-            <th className="px-4 py-3.5 text-center">Fecha Inicio</th>
+            <th className="px-4 py-3.5">Ubicación</th>
+            <th className="px-4 py-3.5 text-center">Año</th>
             <th className="px-4 py-3.5 text-right">Precio / Metro</th>
             <th className="px-4 py-3.5 text-right">Gabinete Base</th>
             <th className="px-4 py-3.5 text-center">Estado</th>
@@ -36,12 +37,15 @@ export const ObraTable: React.FC<Props> = ({ obras, loading, selectedObraId, onS
           {obras.map((obra) => {
             const isSelected = selectedObraId ? obra.id_obra === selectedObraId : false;
             return (
-              <tr key={obra.id_obra} className={`hover:bg-slate-50/70 transition ${isSelected ? 'bg-brand-50/40' : ''}`}>
+              <tr
+                key={obra.id_obra}
+                className={`hover:bg-slate-50/70 transition ${isSelected ? 'bg-brand-50/40' : ''}`}
+              >
                 <td className="px-4 py-3 font-mono font-bold text-slate-500">#{obra.id_obra}</td>
                 <td className="px-4 py-3 font-bold text-slate-900">{obra.nombre_obra}</td>
-                <td className="px-4 py-3 text-slate-600">{obra.descripcion || '-'}</td>
-                <td className="px-4 py-3 text-center font-mono text-slate-600">
-                  {obra.fecha_inicio ? new Date(obra.fecha_inicio).toLocaleDateString('es-AR') : '-'}
+                <td className="px-4 py-3 text-slate-600">{obra.ubicacion || '-'}</td>
+                <td className="px-4 py-3 text-center font-mono font-semibold text-slate-700">
+                  {obra.anio || '-'}
                 </td>
                 <td className="px-4 py-3 font-mono text-right font-bold text-slate-800">
                   ${Number(obra.precio_x_metro).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
@@ -58,9 +62,10 @@ export const ObraTable: React.FC<Props> = ({ obras, loading, selectedObraId, onS
                   <button
                     type="button"
                     onClick={() => onSelectObra(obra)}
-                    className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
                   >
-                    Seleccionar
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Ver Padrón</span>
                   </button>
                 </td>
               </tr>

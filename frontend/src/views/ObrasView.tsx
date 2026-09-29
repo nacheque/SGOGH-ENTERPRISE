@@ -175,10 +175,12 @@ export const ObrasView: React.FC<Props> = ({ showToast }) => {
         <div className="space-y-6 animate-in fade-in duration-200">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-black text-slate-900">Gestión de Obras</h1>
-              <p className="text-xs text-slate-500 mt-1">
-                Administración de proyectos de infraestructura y relevamiento de parcelas territoriales.
-              </p>
+              <h2 className="text-xl font-bold text-slate-900 tracking-tight">Gestión de Obras</h2>
+              <div className="mt-1.5 inline-block">
+                <p className="text-[11px] font-medium text-slate-600 bg-slate-100 border border-slate-200/80 px-2.5 py-0.5 rounded-md">
+                  Administración de proyectos de obras y relevamiento de lotes territoriales.
+                </p>
+              </div>
             </div>
             <button
               onClick={() => setShowAltaModal(true)}
