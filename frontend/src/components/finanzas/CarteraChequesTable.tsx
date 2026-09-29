@@ -188,16 +188,24 @@ export const CarteraChequesTable: React.FC<Props> = ({ selectedObraId }) => {
     return `${dd}/${mm}/${yyyy}`;
   };
 
-  // Muestra siempre el badge de custodia en azul (sin mostrar días si ya fue depositado)
+  // Renderizado del badge con prioridad máxima a estado_cheque === 'DEPOSITADO'
   const renderBadgeCustodia = (c: ChequeCarteraDTO) => {
-    const yaDepositado = esChequeDepositado(c);
+    const anyCheque = c as any;
+    if (anyCheque.estado_cheque === 'DEPOSITADO' || anyCheque.estado === 'DEPOSITADO') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+          <Check className="w-3 h-3 text-slate-500" />
+          Depositado
+        </span>
+      );
+    }
 
     switch (c.estado_custodia) {
       case 'EN_CARTERA':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
             <Clock className="w-3 h-3 text-blue-500" />
-            {yaDepositado ? 'En Cartera' : `En Cartera (${c.dias_para_cobro}d)`}
+            En Cartera ({c.dias_para_cobro}d)
           </span>
         );
       case 'DISPONIBLE':
@@ -211,7 +219,7 @@ export const CarteraChequesTable: React.FC<Props> = ({ selectedObraId }) => {
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
             <AlertOctagon className="w-3 h-3 text-rose-500" />
-            {yaDepositado ? 'Vencido' : `Vencido (${Math.abs(c.dias_para_cobro)}d)`}
+            Vencido ({Math.abs(c.dias_para_cobro)}d)
           </span>
         );
       default:
@@ -369,6 +377,7 @@ export const CarteraChequesTable: React.FC<Props> = ({ selectedObraId }) => {
                 filteredCheques.map((c: ChequeCarteraDTO) => {
                   const yaDepositado = esChequeDepositado(c);
                   const isProcessing = updatingId === c.id_pago;
+                  // El botón solo está visible si aún no fue depositado y está en custodia activa
                   const aptoParaDepositar =
                     !yaDepositado &&
                     (c.estado_custodia === 'EN_CARTERA' || c.estado_custodia === 'DISPONIBLE');
@@ -467,13 +476,11 @@ export const CarteraChequesTable: React.FC<Props> = ({ selectedObraId }) => {
                             )}
                             <span>{isProcessing ? 'Guardando...' : 'Depositar'}</span>
                           </button>
-                        ) : yaDepositado ? (
+                        ) : (
                           <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
                             <Check className="w-3.5 h-3.5 text-slate-400" />
                             Depositado
                           </span>
-                        ) : (
-                          <span className="text-slate-300 font-mono text-[11px]">-</span>
                         )}
                       </td>
                     </tr>
